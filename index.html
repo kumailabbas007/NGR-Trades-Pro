@@ -80,7 +80,24 @@ const quiz=[["What does XAU/USD quote?",["Gold in US dollars","Silver in euros",
 function renderQuiz(){$('quizContent').innerHTML=quiz.map((q,i)=>'<div class="lesson"><b>'+(i+1)+'. '+q[0]+'</b>'+q[1].map((a,j)=>'<label class="check"><input type="radio" name="quiz'+i+'" value="'+j+'"><span>'+a+'</span></label>').join('')+'</div>').join('')}
 function gradeQuiz(){let score=0;quiz.forEach((q,i)=>{let v=document.querySelector('input[name="quiz'+i+'"]:checked');if(v&&+v.value===q[2])score++});$('quizScore').textContent='Your score: '+score+' / '+quiz.length}
 function tool(id,btn){document.querySelectorAll('#toolTabs button').forEach(x=>x.classList.remove('selected'));btn.classList.add('selected');['position','pip','pnl','rr','margin','convert','drawdown','compound','checklist'].forEach(x=>$('tool'+x.charAt(0).toUpperCase()+x.slice(1)).classList.toggle('hide',x!==id))}
-function calcPosition(){let b=+$('pBalance').value,r=+$('pRisk').value,s=+$('pStop').value,c=+$('pContract').value;if(!(b>0&&r>0&&r<=5&&s>0&&c>0))return $('pResult').textContent='Check inputs';let risk=b*r/100,lot=risk/(s*c);$('pResult').textContent=lot.toFixed(4)+' lots';$('pExplain').textContent='Planned loss ≈ $'+risk.toFixed(2)+' before spread, commission and slippage.'}
+function calcPosition(){
+  const balance=Number($('pBalance').value), riskPct=Number($('pRisk').value);
+  const stop=Number($('pStop').value), contract=Number($('pContract').value);
+  const maxRisk=Number(localStorage.getItem('ngrMaxRisk')||1);
+  if(!(balance>0&&riskPct>0&&riskPct<=5&&stop>0&&contract>0)){
+    $('pResult').textContent='Check inputs';
+    return;
+  }
+  if(riskPct>maxRisk){
+    $('pResult').textContent='Above saved max risk ('+maxRisk+'%)';
+    $('pExplain').textContent='Lower the risk percentage or change your maximum-risk preference in Settings.';
+    return;
+  }
+  const riskAmount=balance*riskPct/100;
+  const lots=riskAmount/(stop*contract);
+  $('pResult').textContent=lots.toFixed(4)+' lots';
+  $('pExplain').textContent='Planned loss ≈ $'+riskAmount.toFixed(2)+' before spread, commission and slippage. Check broker minimum volume and lot step; rounding up can exceed your risk limit.';
+}
 function calcPip(){let v=+$('pipLots').value,m=+$('pipMove').value,c=+$('pipContract').value;$('pipResult').textContent=v>0&&m>0&&c>0?'$'+(v*m*c).toFixed(2):'Check inputs'}
 function calcPnl(){
   const entry=Number($('plEntry').value), exit=Number($('plExit').value);
@@ -106,10 +123,17 @@ let alerts=JSON.parse(localStorage.getItem('ngrProAlerts')||'[]');function rende
 function createAlert(){let n=+$('alertLevel').value;if(!(Number.isFinite(n)&&n>0))return alert('Enter a valid price level.');const expiry=$('alertExpiry').value,createdAt=Date.now();const expiresAt=expiry==='24 hours'?createdAt+86400000:expiry==='7 days'?createdAt+604800000:null;alerts.push({cond:$('alertCond').value,level:n,expiry,createdAt,expiresAt});localStorage.setItem('ngrProAlerts',JSON.stringify(alerts));$('alertLevel').value='';$('alertForm').classList.add('hide');renderAlerts()}
 function removeAlert(i){alerts.splice(i,1);localStorage.setItem('ngrProAlerts',JSON.stringify(alerts));renderAlerts()}
 function setTheme(t){document.documentElement.classList.toggle('light',t==='light');localStorage.setItem('ngrTheme',t)}
-function savePrefs(){let n=+$('maxRisk').value;if(!(n>=.1&&n<=5))return alert('Maximum risk must be between 0.1% and 5%.');localStorage.setItem('ngrMaxRisk',n);localStorage.setItem('ngrProLevel',$('levelSelect').value);alert('Preferences saved on this device.')}
+function savePrefs(){
+  const maxRisk=Number($('maxRisk').value);
+  if(!(maxRisk>=0.1&&maxRisk<=5))return alert('Maximum risk must be between 0.1% and 5%.');
+  localStorage.setItem('ngrMaxRisk',maxRisk);
+  localStorage.setItem('ngrProLevel',$('levelSelect').value);
+  $('pRisk').value=String(maxRisk);
+  alert('Preferences saved on this device. Position sizing now enforces this maximum.');
+}
 function chooseLevel(v,btn){selectedLevel=v;document.querySelectorAll('#welcomeModal .row .pill').forEach(x=>x.classList.remove('selected'));btn.classList.add('selected')}
 function finishWelcome(skip){if(!$('riskAgree').checked)return alert('Please accept the risk disclaimer to continue.');localStorage.setItem('ngrWelcome','1');localStorage.setItem('ngrProLevel',selectedLevel);$('levelSelect').value=selectedLevel;$('welcomeModal').classList.remove('open')}
-function init(){setTheme(localStorage.getItem('ngrTheme')||'dark');$('themeSelect').value=localStorage.getItem('ngrTheme')||'dark';$('maxRisk').value=localStorage.getItem('ngrMaxRisk')||'1';$('levelSelect').value=localStorage.getItem('ngrProLevel')||'Beginner';$('favBtn').textContent=localStorage.getItem('ngrFav')||'☆';renderCourses();renderRules();renderGlossary();renderQuiz();renderChecklist();renderAlerts();if(!localStorage.getItem('ngrWelcome'))$('welcomeModal').classList.add('open')}
+function init(){setTheme(localStorage.getItem('ngrTheme')||'dark');$('themeSelect').value=localStorage.getItem('ngrTheme')||'dark';$('maxRisk').value=localStorage.getItem('ngrMaxRisk')||'1';$('pRisk').value=localStorage.getItem('ngrMaxRisk')||'1';$('levelSelect').value=localStorage.getItem('ngrProLevel')||'Beginner';$('favBtn').textContent=localStorage.getItem('ngrFav')||'☆';renderCourses();renderRules();renderGlossary();renderQuiz();renderChecklist();renderAlerts();if(!localStorage.getItem('ngrWelcome'))$('welcomeModal').classList.add('open')}
 init();
 window.addEventListener('focus',renderAlerts);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)renderAlerts()});
