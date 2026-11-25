@@ -111,6 +111,8 @@ function chooseLevel(v,btn){selectedLevel=v;document.querySelectorAll('#welcomeM
 function finishWelcome(skip){if(!$('riskAgree').checked)return alert('Please accept the risk disclaimer to continue.');localStorage.setItem('ngrWelcome','1');localStorage.setItem('ngrProLevel',selectedLevel);$('levelSelect').value=selectedLevel;$('welcomeModal').classList.remove('open')}
 function init(){setTheme(localStorage.getItem('ngrTheme')||'dark');$('themeSelect').value=localStorage.getItem('ngrTheme')||'dark';$('maxRisk').value=localStorage.getItem('ngrMaxRisk')||'1';$('levelSelect').value=localStorage.getItem('ngrProLevel')||'Beginner';$('favBtn').textContent=localStorage.getItem('ngrFav')||'☆';renderCourses();renderRules();renderGlossary();renderQuiz();renderChecklist();renderAlerts();if(!localStorage.getItem('ngrWelcome'))$('welcomeModal').classList.add('open')}
 init();
+window.addEventListener('focus',renderAlerts);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)renderAlerts()});
 if('serviceWorker'in navigator&&location.protocol.startsWith('http'))addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
 </script></body></html>+v.toFixed(2)+' (before costs)';$('plResult').className='result '+(v>=0?'green':'red')}
 function calcRR(){let e=+$('rrEntry').value,s=+$('rrStop').value,t=+$('rrTake').value,side=$('rrSide').value;if(!(Number.isFinite(e)&&Number.isFinite(s)&&Number.isFinite(t)))return $('rrResult').textContent='Check levels';let valid=side==='BUY'?(s<e&&t>e):(s>e&&t<e);if(!valid)return $('rrResult').textContent='Check '+side+' stop and target sides';let r=Math.abs(e-s),g=Math.abs(t-e);$('rrResult').textContent=r>0&&g>0?(g/r).toFixed(2)+':1 reward to risk':'Check levels'}
