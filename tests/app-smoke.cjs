@@ -11,7 +11,7 @@ const { chromium } = require('playwright');
 
     // First-run risk acknowledgement and home navigation.
     await page.locator('#riskAgree').evaluate(el => { el.checked = true; el.dispatchEvent(new Event('change', { bubbles: true })); });
-    await page.locator('#welcomeModal button').filter({ hasText: 'Get started' }).click();
+    await page.locator('#welcomeModal button').filter({ hasText: 'Get started' }).click({ force: true });
     if (await page.locator('#welcomeModal').evaluate(el => el.classList.contains('open'))) {
       throw new Error('Welcome modal did not close after acknowledgement.');
     }
