@@ -7,6 +7,7 @@ on:
       - "gold-chart.html"
       - "sw.js"
       - "manifest.webmanifest"
+      - "tests/**"
       - ".github/workflows/validate-app.yml"
   workflow_dispatch:
 jobs:
@@ -45,3 +46,13 @@ jobs:
           }
           console.log('Required app files and primary sections are present.');
           NODE
+      - name: Run mobile browser smoke tests
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+          python3 -m http.server 8000 > /tmp/ngr-http.log 2>&1 &
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent http://127.0.0.1:8000/ > /dev/null; then break; fi
+            sleep 1
+          done
+          node tests/app-smoke.cjs
