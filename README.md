@@ -15,7 +15,8 @@ A mobile-first, installable XAUUSD trading companion by **NGR TRADES by _kumail_
 - TradingView chart data may be delayed and may differ from broker quotes.
 - The risk calculator is an estimate. Verify contract size, tick value, minimum volume, spread, commission and margin with your broker.
 - Journal and settings are stored in this browser on this device.
-- Reliable background price alerts require a push service/backend and a verified price feed; these are not connected yet.
+- Price reminders in the public app are stored on this device only; they do not monitor prices or send background notifications.
+- A separate private Cloudflare Worker prototype supports scheduled alerts, but it is intentionally not connected to the public app: embedding its shared access token in browser code would expose it to every visitor. A secure per-user authentication design is required before public background alerts can be offered.
 - News and economic calendar integration is not yet connected to a live provider.
 
 Educational tool only, not financial advice. Leveraged trading involves substantial risk.
