@@ -1,0 +1,35 @@
+name: Deploy Gold Alerts Worker
+on:
+  push:
+    branches: [main]
+    paths:
+      - "worker/**"
+      - ".github/workflows/deploy-worker.yml"
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install --global wrangler
+      - name: Generate Wrangler config
+        run: |
+          cat > worker/wrangler.toml <<'EOF'
+          name = "ngr-gold-alerts"
+          main = "index.js"
+          compatibility_date = "2025-11-25"
+          [triggers]
+          crons = ["* * * * *"]
+          [[kv_namespaces]]
+          binding = "ALERTS_KV"
+          id = "${{ vars.CF_KV_NAMESPACE_ID }}"
+          EOF
+      - name: Deploy
+        working-directory: worker
+        run: wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
