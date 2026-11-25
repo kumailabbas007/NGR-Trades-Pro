@@ -14,10 +14,21 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+      - name: Validate deployment settings
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CF_KV_ID: ${{ vars.CF_KV_NAMESPACE_ID }}
+        run: |
+          test -n "$CF_TOKEN" || (echo "Missing CLOUDFLARE_API_TOKEN repository secret" && exit 1)
+          test -n "$CF_ACCOUNT" || (echo "Missing CLOUDFLARE_ACCOUNT_ID repository variable" && exit 1)
+          test -n "$CF_KV_ID" || (echo "Missing CF_KV_NAMESPACE_ID repository variable" && exit 1)
       - run: npm install --global wrangler
       - name: Generate Wrangler config
+        env:
+          CF_KV_ID: ${{ vars.CF_KV_NAMESPACE_ID }}
         run: |
-          cat > worker/wrangler.toml <<'EOF'
+          cat > worker/wrangler.toml <<EOF
           name = "ngr-gold-alerts"
           main = "index.js"
           compatibility_date = "2025-11-25"
@@ -25,7 +36,7 @@ jobs:
           crons = ["* * * * *"]
           [[kv_namespaces]]
           binding = "ALERTS_KV"
-          id = "${{ vars.CF_KV_NAMESPACE_ID }}"
+          id = "$CF_KV_ID"
           EOF
       - name: Deploy
         working-directory: worker
