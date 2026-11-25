@@ -25,6 +25,7 @@ const { chromium } = require('playwright');
     }
 
     // Chart timeframe control must update the embedded chart URL.
+    await page.locator('nav.bottom button[data-screen="charts"]').click();
     await page.locator('#timeframes [data-tf="5"]').click();
     const chartUrl = await page.locator('#mainChart').getAttribute('src');
     if (!chartUrl.includes('interval=5')) throw new Error('Chart timeframe did not update.');
