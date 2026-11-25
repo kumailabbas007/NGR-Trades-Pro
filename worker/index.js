@@ -181,7 +181,7 @@ async function checkAlerts(env) {
           `Observed spot price: $${market.price.toFixed(2)}`,
           `Price timestamp: ${market.updatedAt}`,
           "Source: XAUS indicative spot. Verify the quote on your broker's MT5 before acting."
-        ].join("\\n");
+        ].join("\n");
 
         try {
           const sent = await fetch(`https://ntfy.sh/${encodeURIComponent(env.NTFY_TOPIC)}`, {
