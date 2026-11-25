@@ -1,1 +1,18 @@
-{"name":"NGR TRADES PRO","short_name":"NGR PRO","description":"A disciplined XAUUSD trading companion.","start_url":"./","scope":"./","display":"standalone","background_color":"#090a0d","theme_color":"#090a0d","icons":[{"src":"icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}
+{
+  "name": "NGR TRADES PRO",
+  "short_name": "NGR PRO",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#090a0c",
+  "theme_color": "#090a0c",
+  "description": "A disciplined XAUUSD trading workspace.",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
