@@ -46,6 +46,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-      - name: Smoke test Worker health endpoint
+      - name: Smoke test Worker health and configuration
         run: |
-          curl --fail --silent --show-error https://ngr-gold-alerts.kumail551255.workers.dev/health
+          curl --fail --silent --show-error https://ngr-gold-alerts.kumail551255.workers.dev/health > health.json
+          node -e 'const h=require("./health.json"); if(h.status!=="online" || !h.kvConfigured || !h.authConfigured || !h.notificationConfigured) { console.error("Worker configuration check failed", h); process.exit(1); } console.log("Worker health and required bindings/secrets verified.");'
