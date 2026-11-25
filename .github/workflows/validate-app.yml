@@ -1,0 +1,47 @@
+name: Validate NGR TRADES PRO app
+on:
+  push:
+    branches: [main]
+    paths:
+      - "index.html"
+      - "gold-chart.html"
+      - "sw.js"
+      - "manifest.webmanifest"
+      - ".github/workflows/validate-app.yml"
+  workflow_dispatch:
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Check service worker syntax
+        run: node --check sw.js
+      - name: Check manifest JSON
+        run: node -e 'JSON.parse(require("fs").readFileSync("manifest.webmanifest", "utf8")); console.log("Manifest JSON is valid.");'
+      - name: Check app scripts, unique IDs, and required files
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          for (const file of ['index.html', 'gold-chart.html']) {
+            const html = fs.readFileSync(file, 'utf8');
+            const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)];
+            if (!scripts.length) throw new Error(file + ' has no inline script to validate');
+            for (const [i, match] of scripts.entries()) new vm.Script(match[1], { filename: file + ':script-' + i });
+            const ids = [...html.matchAll(/\bid=["']([^"']+)["']/g)].map(x => x[1]);
+            const duplicates = ids.filter((id, i) => ids.indexOf(id) !== i);
+            if (duplicates.length) throw new Error(file + ' has duplicate IDs: ' + [...new Set(duplicates)].join(', '));
+            console.log(file + ': inline scripts parse; ' + ids.length + ' unique IDs.');
+          }
+          for (const file of ['index.html', 'gold-chart.html', 'sw.js', 'manifest.webmanifest', 'icon.svg']) {
+            if (!fs.existsSync(file)) throw new Error('Missing required app file: ' + file);
+          }
+          const app = fs.readFileSync('index.html', 'utf8');
+          for (const required of ['id="home"', 'id="charts"', 'id="learn"', 'id="tools"', 'id="alerts"', 'id="settings"', 'gold-chart.html']) {
+            if (!app.includes(required)) throw new Error('Missing expected app feature/reference: ' + required);
+          }
+          console.log('Required app files and primary sections are present.');
+          NODE
