@@ -44,3 +44,6 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Smoke test Worker health endpoint
+        run: |
+          curl --fail --silent --show-error https://ngr-gold-alerts.kumail551255.workers.dev/health
