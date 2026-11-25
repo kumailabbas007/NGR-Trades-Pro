@@ -82,7 +82,18 @@ function gradeQuiz(){let score=0;quiz.forEach((q,i)=>{let v=document.querySelect
 function tool(id,btn){document.querySelectorAll('#toolTabs button').forEach(x=>x.classList.remove('selected'));btn.classList.add('selected');['position','pip','pnl','rr','margin','convert','drawdown','compound','checklist'].forEach(x=>$('tool'+x.charAt(0).toUpperCase()+x.slice(1)).classList.toggle('hide',x!==id))}
 function calcPosition(){let b=+$('pBalance').value,r=+$('pRisk').value,s=+$('pStop').value,c=+$('pContract').value;if(!(b>0&&r>0&&r<=5&&s>0&&c>0))return $('pResult').textContent='Check inputs';let risk=b*r/100,lot=risk/(s*c);$('pResult').textContent=lot.toFixed(4)+' lots';$('pExplain').textContent='Planned loss ≈ $'+risk.toFixed(2)+' before spread, commission and slippage.'}
 function calcPip(){let v=+$('pipLots').value,m=+$('pipMove').value,c=+$('pipContract').value;$('pipResult').textContent=v>0&&m>0&&c>0?'$'+(v*m*c).toFixed(2):'Check inputs'}
-function calcPnl(){let e=+$('plEntry').value,x=+$('plExit').value,l=+$('plLots').value,c=+$('plContract').value,sgn=$('plSide').value==='BUY'?1:-1;if(!(Number.isFinite(e)&&Number.isFinite(x)&&l>0&&c>0))return $('plResult').textContent='Check inputs';let v=(x-e)*sgn*l*c;$('plResult').textContent=(v>=0?'+':'')+'
+function calcPnl(){
+  const entry=Number($('plEntry').value), exit=Number($('plExit').value);
+  const lots=Number($('plLots').value), contract=Number($('plContract').value);
+  const sign=$('plSide').value==='BUY'?1:-1;
+  if(!Number.isFinite(entry)||!Number.isFinite(exit)||!(lots>0)||!(contract>0)){
+    $('plResult').textContent='Check inputs';
+    return;
+  }
+  const value=(exit-entry)*sign*lots*contract;
+  $('plResult').textContent=(value>=0?'+':'')+'$'+value.toFixed(2)+' (before costs)';
+  $('plResult').className='result '+(value>=0?'green':'red');
+}
 function calcRR(){let e=+$('rrEntry').value,s=+$('rrStop').value,t=+$('rrTake').value,side=$('rrSide').value;if(!(Number.isFinite(e)&&Number.isFinite(s)&&Number.isFinite(t)))return $('rrResult').textContent='Check levels';let valid=side==='BUY'?(s<e&&t>e):(s>e&&t<e);if(!valid)return $('rrResult').textContent='Check '+side+' stop and target sides';let r=Math.abs(e-s),g=Math.abs(t-e);$('rrResult').textContent=r>0&&g>0?(g/r).toFixed(2)+':1 reward to risk':'Check levels'}
 function calcMargin(){let l=+$('mLots').value,p=+$('mPrice').value,c=+$('mContract').value,v=+$('mLev').value;$('mResult').textContent=l>0&&p>0&&c>0&&v>0?'≈ $'+(l*p*c/v).toFixed(2):'Check inputs'}
 function calcConvert(){let w=+$('weight').value,f=+$('weightUnit').value;if(w>0)$('convertResult').textContent=(w*f).toFixed(4)+' grams'}
