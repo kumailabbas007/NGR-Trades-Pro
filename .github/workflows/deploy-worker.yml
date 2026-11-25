@@ -16,6 +16,21 @@ jobs:
           node-version: "20"
       - name: Check Worker JavaScript syntax
         run: node --check --input-type=module < worker/index.js
+      - name: Check app scripts and duplicate HTML IDs
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          for (const file of ['index.html', 'gold-chart.html']) {
+            const html = fs.readFileSync(file, 'utf8');
+            const scripts = [...html.matchAll(/<script\\b[^>]*>([\\s\\S]*?)<\\/script>/gi)];
+            for (const [i, match] of scripts.entries()) new vm.Script(match[1], { filename: file + ':script-' + i });
+            const ids = [...html.matchAll(/\\bid=["']([^"']+)["']/g)].map(x => x[1]);
+            const duplicates = ids.filter((id, i) => ids.indexOf(id) !== i);
+            if (duplicates.length) throw new Error(file + ' has duplicate IDs: ' + [...new Set(duplicates)].join(', '));
+            console.log(file + ': scripts parse; ' + ids.length + ' unique IDs.');
+          }
+          NODE
       - name: Validate deployment settings
         env:
           CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
