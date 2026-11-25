@@ -152,59 +152,63 @@ async function checkAlerts(env) {
     return;
   }
 
-  let market;
   try {
-    market = await getFreshGoldPrice();
-  } catch (error) {
-    console.log(`Alert check skipped: ${error.message}`);
-    return;
-  }
+    let page = await env.ALERTS_KV.list({ prefix: "alert:", limit: 1000 });
+    if (!page.keys.length) return;
 
-  let cursor;
-  do {
-    const page = await env.ALERTS_KV.list({ prefix: "alert:", cursor, limit: 1000 });
-    for (const key of page.keys) {
-      const alert = await env.ALERTS_KV.get(key.name, "json");
-      if (!alert) continue;
+    // Do not call the external price API when nobody has an active reminder.
+    const market = await getFreshGoldPrice();
+    let cursor = page.list_complete ? undefined : page.cursor;
 
-      if (alert.expiresAt && Date.now() >= alert.expiresAt) {
-        await env.ALERTS_KV.delete(key.name);
-        continue;
-      }
+    while (true) {
+      for (const key of page.keys) {
+        const alert = await env.ALERTS_KV.get(key.name, "json");
+        if (!alert) continue;
 
-      const triggered = alert.condition === "above"
-        ? market.price >= alert.level
-        : market.price <= alert.level;
-      if (!triggered) continue;
-
-      const message = [
-        "NGR TRADES PRO | XAU/USD",
-        `Target ${alert.condition}: $${Number(alert.level).toFixed(2)}`,
-        `Observed spot price: $${market.price.toFixed(2)}`,
-        `Price timestamp: ${market.updatedAt}`,
-        "Source: XAUS indicative spot. Verify the quote on your broker's MT5 before acting."
-      ].join("\\n");
-
-      try {
-        const sent = await fetch(`https://ntfy.sh/${encodeURIComponent(env.NTFY_TOPIC)}`, {
-          method: "POST",
-          headers: {
-            "Title": "NGR Gold Price Alert",
-            "Priority": "high",
-            "Tags": "chart_with_upwards_trend"
-          },
-          body: message,
-          signal: AbortSignal.timeout(10000)
-        });
-        if (sent.ok) {
+        if (alert.expiresAt && Date.now() >= alert.expiresAt) {
           await env.ALERTS_KV.delete(key.name);
-        } else {
-          console.log(`Notification failed with HTTP ${sent.status}; alert retained.`);
+          continue;
         }
-      } catch (error) {
-        console.log(`Notification request failed; alert retained: ${error.message}`);
+
+        const triggered = alert.condition === "above"
+          ? market.price >= alert.level
+          : market.price <= alert.level;
+        if (!triggered) continue;
+
+        const message = [
+          "NGR TRADES PRO | XAU/USD",
+          `Target ${alert.condition}: $${Number(alert.level).toFixed(2)}`,
+          `Observed spot price: $${market.price.toFixed(2)}`,
+          `Price timestamp: ${market.updatedAt}`,
+          "Source: XAUS indicative spot. Verify the quote on your broker's MT5 before acting."
+        ].join("\\n");
+
+        try {
+          const sent = await fetch(`https://ntfy.sh/${encodeURIComponent(env.NTFY_TOPIC)}`, {
+            method: "POST",
+            headers: {
+              "Title": "NGR Gold Price Alert",
+              "Priority": "high",
+              "Tags": "chart_with_upwards_trend"
+            },
+            body: message,
+            signal: AbortSignal.timeout(10000)
+          });
+          if (sent.ok) {
+            await env.ALERTS_KV.delete(key.name);
+          } else {
+            console.log(`Notification failed with HTTP ${sent.status}; alert retained.`);
+          }
+        } catch (error) {
+          console.log(`Notification request failed; alert retained: ${error.message}`);
+        }
       }
+
+      if (!cursor) break;
+      page = await env.ALERTS_KV.list({ prefix: "alert:", cursor, limit: 1000 });
+      cursor = page.list_complete ? undefined : page.cursor;
     }
-    cursor = page.list_complete ? undefined : page.cursor;
-  } while (cursor);
+  } catch (error) {
+    console.log(`Alert check failed: ${error.message}`);
+  }
 }
