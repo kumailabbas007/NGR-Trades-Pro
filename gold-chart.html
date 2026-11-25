@@ -14,9 +14,25 @@ body{display:flex;flex-direction:column}.top{height:54px;flex:0 0 54px;display:f
 <script>
 async function enterImmersive(){
  const root=document.documentElement;
- try{if(!document.fullscreenElement&&root.requestFullscreen)await root.requestFullscreen()}catch(e){}
- try{if(screen.orientation&&screen.orientation.lock)await screen.orientation.lock('landscape')}catch(e){}
- document.getElementById('hint').textContent='Full-screen chart · Rotate your phone sideways if needed. Use your browser controls to exit.';
+ const hint=document.getElementById('hint');
+ let fullscreen=false, landscapeLocked=false;
+ try{
+  if(!document.fullscreenElement&&root.requestFullscreen) await root.requestFullscreen();
+  fullscreen=Boolean(document.fullscreenElement);
+ }catch(e){}
+ try{
+  if(screen.orientation&&screen.orientation.lock){
+   await screen.orientation.lock('landscape');
+   landscapeLocked=true;
+  }
+ }catch(e){}
+ if(fullscreen&&landscapeLocked){
+  hint.textContent='Immersive landscape mode enabled. Use your browser controls to exit.';
+ }else if(fullscreen){
+  hint.textContent='Full screen enabled. Rotate your phone sideways if it does not rotate automatically.';
+ }else{
+  hint.textContent='Your browser did not allow full screen here. Rotate your phone sideways or open this page in your browser.';
+ }
 }
 function goBack(){if(history.length>1)history.back();else location.href='./index.html'}
 </script></body></html>
