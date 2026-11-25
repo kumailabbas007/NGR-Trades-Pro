@@ -1,20 +1,42 @@
-# NGR Gold Alerts Worker deployment
+# NGR Gold Alerts Worker
 
-This repository folder deploys the Cloudflare Worker through GitHub Actions.
+Cloudflare Worker for private, background XAU/USD alert experiments.
 
-## Required GitHub repository settings
-Add these repository secrets/variables before running the workflow:
+## Deployment
 
-- Secret `CLOUDFLARE_API_TOKEN`: scoped token with **Account > Workers Scripts > Edit** and **Account > Workers KV Storage > Edit**, limited to your Cloudflare account.
-- Variable `CF_ACCOUNT_ID`? (not currently used by this workflow)
-- Variables:
-  - `CF_KV_NAMESPACE_ID`: ID of the existing KV namespace bound as ALERTS_KV
-  - `CLOUDFLARE_ACCOUNT_ID`: Cloudflare account ID
+The GitHub Actions workflow deploys this Worker when files under `worker/` change.
 
-The Worker also needs Cloudflare secrets `APP_TOKEN` and `NTFY_TOPIC`, which are configured separately in the Worker dashboard (or via Wrangler secrets).
+Required GitHub repository settings:
 
-## Caveats
-- The app must eventually be updated to call this Worker and send its APP_TOKEN.
-- The price endpoint and payload schema are not yet validated; scheduled checks may not work until this source is confirmed.
-- Cron frequency is one minute.
-- Spot prices can differ from broker prices. Confirm on MT5 before acting.
+- Secret `CLOUDFLARE_API_TOKEN`: scoped to the account with Workers Scripts Edit and Workers KV Storage Edit.
+- Variable `CLOUDFLARE_ACCOUNT_ID`: the Cloudflare account ID.
+- Variable `CF_KV_NAMESPACE_ID`: the existing KV namespace ID bound as `ALERTS_KV`.
+
+Configure these Worker secrets in Cloudflare:
+
+- `APP_TOKEN`: a long random token (at least 24 characters).
+- `NTFY_TOPIC`: the private, unguessable ntfy topic subscribed to by the receiving device.
+
+Do not commit either secret or paste it into source control.
+
+## API
+
+- `GET /health`: reports service status and whether required bindings/secrets are configured. It never returns secret values.
+- `GET /alerts`: list alerts (Bearer token required).
+- `POST /alerts`: create an alert with JSON `{ "condition": "above" | "below", "level": 3000, "expiry": "Until deleted" | "24 hours" | "7 days" }`.
+- `DELETE /alerts?id=<uuid>`: delete an alert.
+
+All alert endpoints require the configured Bearer token and the GitHub Pages origin.
+
+## Price and notification behavior
+
+- Cron runs once per minute; it is not a 5- or 10-second feed.
+- The Worker reads XAUS `/api/v1/spot?compact=1`.
+- It checks `data_state.status`, `data_state.age_seconds`, and the response `updated_at` timestamp before using a price. Stale or unavailable prices are skipped; no price is invented.
+- Alerts are one-shot: after ntfy accepts a notification, the alert is deleted.
+- Expiring alerts are automatically removed.
+- XAUS spot is indicative and can differ from Exness/MT5 executable quotes. Verify on the broker platform before acting.
+
+## Public app security limitation
+
+The static GitHub Pages app must not contain the shared `APP_TOKEN`. Anything embedded in browser JavaScript or local storage can be extracted by visitors. Therefore the public app's current reminder list remains device-local and is not connected to this private Worker. Do not expose the Worker token in `index.html`. A public multi-user alert service needs per-user authentication and abuse controls before it can safely be offered to visitors.
