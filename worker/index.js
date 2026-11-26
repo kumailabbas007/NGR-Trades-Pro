@@ -3,18 +3,42 @@ const PRICE_URL = "https://xaus.com/api/v1/spot?compact=1";
 const MAX_PRICE_AGE_SECONDS = 180;
 const MAX_ALERTS_PER_DEVICE = 20;
 const ALLOWED_EXPIRY = new Set(["Until deleted", "24 hours", "7 days"]);
+const PREFIX = "device-alerts:";
 function corsHeaders(){return {"Access-Control-Allow-Origin":ALLOWED_ORIGIN,"Access-Control-Allow-Headers":"Content-Type, Authorization","Access-Control-Allow-Methods":"GET, POST, DELETE, OPTIONS","Access-Control-Max-Age":"86400","Vary":"Origin"};}
 function json(data,status=200){return new Response(JSON.stringify(data),{status,headers:{"Content-Type":"application/json; charset=utf-8",...corsHeaders()}});}
 function token(request){const t=(request.headers.get("Authorization")||"").replace(/^Bearer\s+/i,"");return /^[a-f0-9]{64}$/i.test(t)?t.toLowerCase():null;}
 function expiryTime(expiry,now){if(expiry==="24 hours")return now+86400000;if(expiry==="7 days")return now+604800000;return null;}
 function validTopic(t){return typeof t==="string"&&/^[a-zA-Z0-9_-]{8,64}$/.test(t);}
-export default {async fetch(request,env){const url=new URL(request.url),origin=request.headers.get("Origin")||"";
+function clean(alerts){const now=Date.now();return Array.isArray(alerts)?alerts.filter(a=>a&&typeof a.id==="string"&&(!a.expiresAt||now<a.expiresAt)):[];}
+async function read(env,key){const value=await env.ALERTS_KV.get(key,"json");return clean(value);}
+async function write(env,key,alerts){if(alerts.length)await env.ALERTS_KV.put(key,JSON.stringify(alerts));else await env.ALERTS_KV.delete(key);}
+export default {async fetch(request,env){
+const url=new URL(request.url),origin=request.headers.get("Origin")||"";
 if(request.method==="OPTIONS")return origin===ALLOWED_ORIGIN?new Response(null,{status:204,headers:corsHeaders()}):new Response(null,{status:403});
-if(url.pathname==="/health"&&request.method==="GET")return json({status:"online",service:"NGR Gold Alerts",kvConfigured:Boolean(env.ALERTS_KV),deviceTokenAuth:true,notificationConfigured:true});
+if(url.pathname==="/health"&&request.method==="GET")return json({status:"online",service:"NGR Gold Alerts",kvConfigured:Boolean(env.ALERTS_KV),deviceTokenAuth:true,notificationConfigured:true,storageMode:"device-array-v2"});
 if(origin!==ALLOWED_ORIGIN)return json({error:"Origin not allowed"},403);if(!env.ALERTS_KV)return json({error:"Storage unavailable"},503);
-const t=token(request);if(!t)return json({error:"Invalid device token"},401);const prefix="alert:"+t+":";
-if(url.pathname==="/alerts"&&request.method==="GET"){let alerts=[],cursor;do{const page=await env.ALERTS_KV.list({prefix,cursor,limit:1000});for(const k of page.keys){const a=await env.ALERTS_KV.get(k.name,"json");if(a)alerts.push(a);}cursor=page.list_complete?undefined:page.cursor;}while(cursor);alerts.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));return json({alerts});}
-if(url.pathname==="/alerts"&&request.method==="POST"){try{if(!(request.headers.get("Content-Type")||"").toLowerCase().includes("application/json"))return json({error:"JSON required"},415);const raw=await request.text();if(raw.length>4096)return json({error:"Too large"},413);let b;try{b=JSON.parse(raw);}catch{return json({error:"Invalid JSON"},400);}const level=Number(b.level),condition=b.condition,expiry=ALLOWED_EXPIRY.has(b.expiry)?b.expiry:"Until deleted",topic=b.topic;if(!Number.isFinite(level)||level<=0||level>1000000||!["above","below"].includes(condition)||!validTopic(topic))return json({error:"Invalid target, condition or topic"},400);const page=await env.ALERTS_KV.list({prefix,limit:MAX_ALERTS_PER_DEVICE});if(page.keys.length>=MAX_ALERTS_PER_DEVICE)return json({error:"Limit of 20 alerts per device"},429);const now=Date.now(),expiresAt=expiryTime(expiry,now),id=crypto.randomUUID(),alert={id,symbol:"XAUUSD",condition,level,topic,createdAt:now,expiry,expiresAt};const opts=expiresAt?{expirationTtl:Math.ceil((expiresAt-now)/1000)}:undefined;await env.ALERTS_KV.put(prefix+id,JSON.stringify(alert),opts);return json({success:true,alert},201);}catch(e){console.log("Alert create error:",e?.message||e);return json({error:"Alert storage failed",detail:String(e?.message||e)},500);}}
-if(url.pathname==="/alerts"&&request.method==="DELETE"){const id=url.searchParams.get("id");if(!id||!/^[a-f0-9-]{36}$/i.test(id))return json({error:"Invalid ID"},400);await env.ALERTS_KV.delete(prefix+id);return json({success:true});}return json({error:"Not found"},404);},async scheduled(controller,env,ctx){ctx.waitUntil(checkAlerts(env));}};
+const t=token(request);if(!t)return json({error:"Invalid device token"},401);const key=PREFIX+t;
+if(url.pathname==="/alerts"&&request.method==="GET"){try{const alerts=await read(env,key);return json({alerts});}catch(e){return json({error:"Alert storage failed",detail:String(e?.message||e)},503);}}
+if(url.pathname==="/alerts"&&request.method==="POST"){try{
+if(!(request.headers.get("Content-Type")||"").toLowerCase().includes("application/json"))return json({error:"JSON required"},415);
+const raw=await request.text();if(raw.length>4096)return json({error:"Too large"},413);let b;try{b=JSON.parse(raw);}catch{return json({error:"Invalid JSON"},400);}
+const level=Number(b.level),condition=b.condition,expiry=ALLOWED_EXPIRY.has(b.expiry)?b.expiry:"Until deleted",topic=b.topic;
+if(!Number.isFinite(level)||level<=0||level>1000000||!["above","below"].includes(condition)||!validTopic(topic))return json({error:"Invalid target, condition or topic"},400);
+const alerts=await read(env,key);if(alerts.length>=MAX_ALERTS_PER_DEVICE)return json({error:"Limit of 20 alerts per device"},429);
+const now=Date.now(),expiresAt=expiryTime(expiry,now),id=crypto.randomUUID(),alert={id,symbol:"XAUUSD",condition,level,topic,createdAt:now,expiry,expiresAt};
+alerts.push(alert);await env.ALERTS_KV.put(key,JSON.stringify(alerts));return json({success:true,alert},201);
+}catch(e){console.log("Alert create error:",e?.message||e);return json({error:"Alert storage failed",detail:String(e?.message||e)},503);}}
+if(url.pathname==="/alerts"&&request.method==="DELETE"){try{const id=url.searchParams.get("id");if(!id||!/^[a-f0-9-]{36}$/i.test(id))return json({error:"Invalid ID"},400);const alerts=await read(env,key),remaining=alerts.filter(a=>a.id!==id);await write(env,key,remaining);return json({success:true});}catch(e){return json({error:"Alert storage failed",detail:String(e?.message||e)},503);}}
+return json({error:"Not found"},404);
+},async scheduled(controller,env,ctx){ctx.waitUntil(checkAlerts(env));}};
 async function getFreshPrice(){const r=await fetch(PRICE_URL,{headers:{Accept:"application/json"},signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error("Feed HTTP "+r.status);const d=await r.json(),p=Number(d?.spot_usd_oz),s=d?.data_state,a=Number(s?.age_seconds),ts=Date.parse(d?.updated_at||""),age=(Date.now()-ts)/1000;if(!Number.isFinite(p)||p<=0||s?.status!=="fresh"||!Number.isFinite(a)||a<0||a>MAX_PRICE_AGE_SECONDS||!Number.isFinite(ts)||age< -30||age>MAX_PRICE_AGE_SECONDS)throw Error("Quote stale or invalid");return {price:p,updatedAt:d.updated_at};}
-async function checkAlerts(env){if(!env.ALERTS_KV)return;try{let page=await env.ALERTS_KV.list({prefix:"alert:",limit:1000}),cursor=page.list_complete?undefined:page.cursor;if(!page.keys.length)return;const market=await getFreshPrice();while(true){for(const k of page.keys){const a=await env.ALERTS_KV.get(k.name,"json");if(!a)continue;if(a.expiresAt&&Date.now()>=a.expiresAt){await env.ALERTS_KV.delete(k.name);continue;}const hit=a.condition==="above"?market.price>=a.level:market.price<=a.level;if(!hit)continue;const msg=["NGR TRADES PRO | XAU/USD","Target "+a.condition+": $"+Number(a.level).toFixed(2),"Observed spot price: $"+market.price.toFixed(2),"Price timestamp: "+market.updatedAt,"Indicative spot; verify on your broker before acting."].join("\\n");try{const n=await fetch("https://ntfy.sh/"+encodeURIComponent(a.topic),{method:"POST",headers:{"Title":"NGR Gold Price Alert","Priority":"high","Tags":"chart_with_upwards_trend"},body:msg,signal:AbortSignal.timeout(10000)});if(n.ok)await env.ALERTS_KV.delete(k.name);else console.log("ntfy HTTP "+n.status);}catch(e){console.log("Notification failed: "+e.message);}}if(!cursor)break;page=await env.ALERTS_KV.list({prefix:"alert:",cursor,limit:1000});cursor=page.list_complete?undefined:page.cursor;}}catch(e){console.log("Alert check failed: "+e.message);}}
+async function checkAlerts(env){if(!env.ALERTS_KV)return;try{
+let page=await env.ALERTS_KV.list({prefix:PREFIX,limit:100}),cursor=page.list_complete?undefined:page.cursor,market=null;
+while(true){for(const k of page.keys){let alerts=await read(env,k.name);if(!alerts.length){await env.ALERTS_KV.delete(k.name);continue;}
+if(!market)market=await getFreshPrice();let changed=false,keep=[];
+for(const a of alerts){const hit=a.condition==="above"?market.price>=a.level:market.price<=a.level;if(!hit){keep.push(a);continue;}
+const msg=["NGR TRADES PRO | XAU/USD","Target "+a.condition+": $"+Number(a.level).toFixed(2),"Observed spot price: $"+market.price.toFixed(2),"Price timestamp: "+market.updatedAt,"Indicative spot; verify on your broker before acting."].join("\n");
+try{const n=await fetch("https://ntfy.sh/"+encodeURIComponent(a.topic),{method:"POST",headers:{"Title":"NGR Gold Price Alert","Priority":"high","Tags":"chart_with_upwards_trend"},body:msg,signal:AbortSignal.timeout(10000)});if(n.ok){changed=true;console.log("Alert delivered:",a.id);}else{keep.push(a);console.log("ntfy HTTP "+n.status);}}catch(e){keep.push(a);console.log("Notification failed: "+e.message);}}
+if(changed||keep.length!==alerts.length)await write(env,k.name,keep);
+}if(!cursor)break;page=await env.ALERTS_KV.list({prefix:PREFIX,cursor,limit:100});cursor=page.list_complete?undefined:page.cursor;}
+}catch(e){console.log("Alert check failed: "+e.message);}}
