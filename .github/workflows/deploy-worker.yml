@@ -64,4 +64,4 @@ jobs:
       - name: Smoke test Worker health and configuration
         run: |
           curl --fail --silent --show-error https://ngr-gold-alerts.kumail551255.workers.dev/health > health.json
-          node -e 'const h=require("./health.json"); if(h.status!=="online" || !h.kvConfigured || !h.authConfigured || !h.notificationConfigured) { console.error("Worker configuration check failed", h); process.exit(1); } console.log("Worker health and required bindings/secrets verified.");'
+          node -e 'const h=require("./health.json"); if(h.status!=="online" || !h.kvConfigured || !h.deviceTokenAuth || !h.notificationConfigured) { console.error("Worker configuration check failed", h); process.exit(1); } console.log("Worker health and required bindings/secrets verified.");'
