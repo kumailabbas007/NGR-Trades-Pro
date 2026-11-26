@@ -30,7 +30,7 @@ const { chromium } = require('playwright');
       window.firebase = { initializeApp() {}, auth: authFactory };
     })();
   `;
-  await page.route('https://www.gstatic.com/firebase/**', route => route.fulfill({ status: 200, contentType: 'application/javascript', body: firebaseStub }));
+  await page.route('https://www.gstatic.com/firebasejs/**', route => route.fulfill({ status: 200, contentType: 'application/javascript', body: firebaseStub }));
   await page.route('https://ngr-gold-alerts.kumail551255.workers.dev/**', async route => {
     const request = route.request();
     const url = new URL(request.url());
