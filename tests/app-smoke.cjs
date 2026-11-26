@@ -113,8 +113,10 @@ const { chromium } = require('playwright');
     await page.locator('#alertLevel').fill('2700');
     await page.locator('#alertExpiry').selectOption({ label: '24 hours' });
     await page.locator('#alertForm button').filter({ hasText: 'Create cloud alert' }).click();
+    await page.waitForFunction(() => document.querySelector('#alertList')?.textContent.includes('2700'));
     if (!(await page.locator('#alertList').textContent()).includes('2700')) throw new Error('Cloud alert did not appear in the list.');
     await page.locator('#alertList button').filter({ hasText: 'Delete' }).click();
+    await page.waitForFunction(() => document.querySelector('#alertList')?.textContent.includes('No active alerts'));
     if (!(await page.locator('#alertList').textContent()).includes('No active alerts')) throw new Error('Cloud alert deletion failed.');
 
     // Full-screen chart route must open as a separate page.
