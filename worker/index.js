@@ -72,7 +72,19 @@ export default {async fetch(request,env){
       const prompt="You are ZYRO, a careful educational gold-trading coach inside NGR TRADES PRO. Explain concepts clearly for a beginner. Focus on XAU/USD education, technical analysis concepts, risk management, trading psychology and journal review. Never claim to know live market prices or current news unless the user supplies them. Do not give personalized financial advice, guaranteed predictions, or instructions to buy/sell now. Encourage position sizing, stop-loss planning, independent verification and demo practice. If asked for a signal, explain why a single signal is unreliable and provide an educational checklist instead. Keep the response concise and structured. User question: "+message;
       const response=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key="+encodeURIComponent(env.GEMINI_API_KEY),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({systemInstruction:{parts:[{text:"You are ZYRO, an educational trading coach. You are not a financial adviser and must not issue guaranteed trade signals."}]},contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{temperature:0.4,maxOutputTokens:700}}),signal:AbortSignal.timeout(20000)});
       const data=await response.json().catch(()=>({}));
-      if(!response.ok){console.log("Gemini request failed:",response.status);return json({error:"AI provider request failed",detail:"The AI service could not complete this request. Try again later."},502);}
+      if(!response.ok){
+        const googleError=data?.error||{};
+        const googleStatus=String(googleError.status||"UNKNOWN").slice(0,60);
+        const googleMessage=String(googleError.message||"No error message returned").replace(/[\\r\\n]+/g," ").slice(0,240);
+        console.log("Gemini request failed:",JSON.stringify({httpStatus:response.status,status:googleStatus,message:googleMessage}));
+        let detail="Gemini rejected the request (HTTP "+response.status+", "+googleStatus+"). ";
+        if(response.status===400||response.status===401)detail+="Check that GEMINI_API_KEY is a valid Gemini API key.";
+        else if(response.status===403)detail+="Google denied this project's API access. Check project eligibility, API restrictions and billing in Google AI Studio/Cloud.";
+        else if(response.status===404)detail+="The configured Gemini model or API endpoint was not found.";
+        else if(response.status===429)detail+="The Gemini API quota or rate limit has been reached. Wait for quota reset or review usage limits.";
+        else detail+="Check the Cloudflare Worker logs for Google's error message.";
+        return json({error:"AI provider request failed",detail,providerStatus:response.status,providerCode:googleStatus},502);
+      }
       const answer=(data?.candidates?.[0]?.content?.parts||[]).map(p=>p.text||"").join("\n").trim();
       if(!answer)return json({error:"Empty AI response"},502);
       return json({success:true,answer});
