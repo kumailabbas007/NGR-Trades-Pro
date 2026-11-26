@@ -6,7 +6,8 @@ const ALLOWED_EXPIRY = new Set(["Until deleted", "24 hours", "7 days"]);
 const PREFIX = "device-alerts:";
 function corsHeaders(){return {"Access-Control-Allow-Origin":ALLOWED_ORIGIN,"Access-Control-Allow-Headers":"Content-Type, Authorization","Access-Control-Allow-Methods":"GET, POST, DELETE, OPTIONS","Access-Control-Max-Age":"86400","Vary":"Origin"};}
 function json(data,status=200){return new Response(JSON.stringify(data),{status,headers:{"Content-Type":"application/json; charset=utf-8",...corsHeaders()}});}
-function token(request){const h=(request.headers.get("Authorization")||"").trim();const m=h.match(/^(?:Bearer\s+)?([a-f0-9]{64})$/i);return m?m[1].toLowerCase():null;}
+function token(request){const raw=request.headers.get("Authorization")||"";const h=raw.trim().replace(/^Bearer\s+/i,"").trim().replace(/^([\'"])(.*)\\1$/,"$2");return /^[a-f0-9]{64}$/i.test(h)?h.toLowerCase():null;}
+function tokenDiagnostics(request){const raw=request.headers.get("Authorization")||"";const value=raw.trim().replace(/^Bearer\\s+/i,"").trim();return {authorizationPresent:Boolean(raw),scheme:/^Bearer\\s+/i.test(raw.trim()),valueLength:value.length,hex64:/^[a-f0-9]{64}$/i.test(value),headerNameSeen:Boolean(request.headers.get("authorization"))};}
 function expiryTime(expiry,now){if(expiry==="24 hours")return now+86400000;if(expiry==="7 days")return now+604800000;return null;}
 function validTopic(t){return typeof t==="string"&&/^[a-zA-Z0-9_-]{8,64}$/.test(t);}
 function clean(alerts){const now=Date.now();return Array.isArray(alerts)?alerts.filter(a=>a&&typeof a.id==="string"&&(!a.expiresAt||now<a.expiresAt)):[];}
@@ -17,10 +18,10 @@ async function sendNtfy(topic,title,message){const r=await fetch("https://ntfy.s
 export default {async fetch(request,env){
 const url=new URL(request.url),origin=request.headers.get("Origin")||"";
 if(request.method==="OPTIONS")return origin===ALLOWED_ORIGIN?new Response(null,{status:204,headers:corsHeaders()}):new Response(null,{status:403});
-if(url.pathname==="/health"&&request.method==="GET")return json({status:"online",service:"NGR Gold Alerts",kvConfigured:Boolean(env.ALERTS_KV),auth:"device-token",monitorIntervalSeconds:60,storageMode:"device-array-v2"});
+if(url.pathname==="/health"&&request.method==="GET")return json({status:"online",service:"NGR Gold Alerts",kvConfigured:Boolean(env.ALERTS_KV),auth:"device-token",monitorIntervalSeconds:60,storageMode:"device-array-v2",build:"auth-diagnostics-2026-11-26"});
 if(origin!==ALLOWED_ORIGIN)return json({error:"Origin not allowed"},403);
 if(!env.ALERTS_KV)return json({error:"Storage unavailable"},503);
-const t=token(request);if(!t)return json({error:"Invalid device token"},401);
+const t=token(request);if(!t)return json({error:"Invalid device token",diagnostics:tokenDiagnostics(request)},401);
 const key=PREFIX+t;
 if(url.pathname==="/test-notification"&&request.method==="POST"){try{const b=await request.json(),topic=b?.topic;if(!validTopic(topic))return json({error:"Invalid ntfy topic"},400);await sendNtfy(topic,"NGR TRADES PRO · Test notification","Success! Your NGR TRADES PRO notification route reached ntfy. Check that this message appears on your phone. This test does not verify future market alerts.");return json({success:true,acceptedByNtfy:true,message:"ntfy accepted the test notification"});}catch(e){return json({error:"Test notification failed",detail:String(e?.message||e)},502);}}
 if(url.pathname==="/price"&&request.method==="GET"){try{return json(await getFreshPrice());}catch(e){return json({error:"Price feed unavailable",detail:String(e?.message||e)},503);}}
