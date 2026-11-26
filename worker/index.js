@@ -14,7 +14,7 @@ function clean(alerts){const now=Date.now();return Array.isArray(alerts)?alerts.
 async function read(env,key){return clean(await env.ALERTS_KV.get(key,"json"));}
 async function write(env,key,alerts){if(alerts.length)await env.ALERTS_KV.put(key,JSON.stringify(alerts));else await env.ALERTS_KV.delete(key);}
 async function getFreshPrice(){const r=await fetch(PRICE_URL,{headers:{Accept:"application/json"},signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error("Price feed HTTP "+r.status);const d=await r.json(),p=Number(d?.spot_usd_oz),s=d?.data_state,a=Number(s?.age_seconds),ts=Date.parse(d?.updated_at||""),age=(Date.now()-ts)/1000;if(!Number.isFinite(p)||p<=0||s?.status!=="fresh"||!Number.isFinite(a)||a<0||a>MAX_PRICE_AGE_SECONDS||!Number.isFinite(ts)||age< -30||age>MAX_PRICE_AGE_SECONDS)throw Error("Price quote is stale or invalid");return {price:p,updatedAt:d.updated_at};}
-async function sendNtfy(topic,title,message){const r=await fetch("https://ntfy.sh/"+encodeURIComponent(topic),{method:"POST",headers:{"Title":title,"Priority":"high","Tags":"chart_with_upwards_trend"},body:message,signal:AbortSignal.timeout(12000)});if(!r.ok)throw Error("ntfy HTTP "+r.status);return true;}
+async function sendNtfy(topic,title,message){const r=await fetch("https://ntfy.sh/"+encodeURIComponent(topic),{method:"POST",headers:{"Title":title,"Priority":"high","Tags":"chart_with_upwards_trend"},body:message,signal:AbortSignal.timeout(12000)});if(!r.ok){const retry=Number(r.headers.get("Retry-After"));const detail=await r.text().catch(()=>"");const e=Error("ntfy HTTP "+r.status+(Number.isFinite(retry)&&retry>0?"; retry after "+retry+" seconds":"")+(detail?"; "+detail.slice(0,180):""));e.status=r.status;e.retryAfterSeconds=Number.isFinite(retry)&&retry>0?retry:null;throw e;}return true;}
 export default {async fetch(request,env){
 const url=new URL(request.url),origin=request.headers.get("Origin")||"";
 if(request.method==="OPTIONS")return origin===ALLOWED_ORIGIN?new Response(null,{status:204,headers:corsHeaders()}):new Response(null,{status:403});
@@ -23,7 +23,7 @@ if(origin!==ALLOWED_ORIGIN)return json({error:"Origin not allowed"},403);
 if(!env.ALERTS_KV)return json({error:"Storage unavailable"},503);
 const t=token(request);if(!t)return json({error:"Invalid device token",diagnostics:tokenDiagnostics(request)},401);
 const key=PREFIX+t;
-if(url.pathname==="/test-notification"&&request.method==="POST"){try{const b=await request.json(),topic=b?.topic;if(!validTopic(topic))return json({error:"Invalid ntfy topic"},400);await sendNtfy(topic,"NGR TRADES PRO · Test notification","Success! Your NGR TRADES PRO notification route reached ntfy. Check that this message appears on your phone. This test does not verify future market alerts.");return json({success:true,acceptedByNtfy:true,message:"ntfy accepted the test notification"});}catch(e){return json({error:"Test notification failed",detail:String(e?.message||e)},502);}}
+if(url.pathname==="/test-notification"&&request.method==="POST"){try{const b=await request.json(),topic=b?.topic;if(!validTopic(topic))return json({error:"Invalid ntfy topic"},400);await sendNtfy(topic,"NGR TRADES PRO · Test notification","Success! Your NGR TRADES PRO notification route reached ntfy. Check that this message appears on your phone. This test does not verify future market alerts.");return json({success:true,acceptedByNtfy:true,message:"ntfy accepted the test notification"});}catch(e){const status=e?.status===429?429:502;return json({error:"Test notification failed",detail:String(e?.message||e),retryAfterSeconds:e?.retryAfterSeconds||null},status);}}
 if(url.pathname==="/price"&&request.method==="GET"){try{return json(await getFreshPrice());}catch(e){return json({error:"Price feed unavailable",detail:String(e?.message||e)},503);}}
 if(!env.ALERTS_KV)return json({error:"Storage unavailable"},503);
 if(url.pathname==="/alerts"&&request.method==="GET"){try{return json({alerts:await read(env,key)});}catch(e){return json({error:"Alert storage failed",detail:String(e?.message||e)},503);}}
@@ -43,9 +43,9 @@ async function checkAlerts(env){if(!env.ALERTS_KV)return;try{
 let page=await env.ALERTS_KV.list({prefix:PREFIX,limit:100}),cursor=page.list_complete?undefined:page.cursor,market=null;
 while(true){for(const k of page.keys){let alerts=await read(env,k.name);if(!alerts.length){await env.ALERTS_KV.delete(k.name);continue;}
 if(!market)market=await getFreshPrice();const keep=[];let changed=false;
-for(const a of alerts){const hit=a.condition==="above"?market.price>=a.level:market.price<=a.level;if(!hit){keep.push(a);continue;}
+for(const a of alerts){if(a.retryAfterAt&&Date.now()<a.retryAfterAt){keep.push(a);continue;}const hit=a.condition==="above"?market.price>=a.level:market.price<=a.level;if(!hit){keep.push(a);continue;}
 const msg=["NGR TRADES PRO | XAU/USD","Target "+a.condition+": $"+Number(a.level).toFixed(2),"Observed spot price: $"+market.price.toFixed(2),"Price timestamp: "+market.updatedAt,"Indicative spot price; broker prices may differ. Verify before acting."].join("\\n");
-try{await sendNtfy(a.topic,"NGR Gold Price Alert",msg);changed=true;console.log("ntfy accepted alert:",a.id);}catch(e){keep.push(a);console.log("Alert delivery failed; will retry:",a.id,e?.message||e);}}
+try{await sendNtfy(a.topic,"NGR Gold Price Alert",msg);changed=true;console.log("ntfy accepted alert:",a.id);}catch(e){if(e?.status===429){const delay=(e.retryAfterSeconds||900)*1000;a.retryAfterAt=Date.now()+delay;changed=true;console.log("ntfy rate limited; alert paused until retry:",a.id,delay);}keep.push(a);console.log("Alert delivery failed; will retry:",a.id,e?.message||e);}}
 if(changed||keep.length!==alerts.length)await write(env,k.name,keep);
 }if(!cursor)break;page=await env.ALERTS_KV.list({prefix:PREFIX,cursor,limit:100});cursor=page.list_complete?undefined:page.cursor;}
 }catch(e){console.log("Scheduled alert check failed:",e?.message||e);}}
