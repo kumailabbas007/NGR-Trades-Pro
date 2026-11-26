@@ -1,4 +1,4 @@
-const CACHE = "ngr-trades-pro-v7";
+const CACHE = "ngr-trades-pro-v8";
 const APP_SHELL = [
   "./",
   "./index.html",
