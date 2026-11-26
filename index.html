@@ -139,23 +139,4 @@ init();
 window.addEventListener('focus',renderAlerts);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)renderAlerts()});
 if('serviceWorker'in navigator&&location.protocol.startsWith('http'))addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
-</script></body></html>+v.toFixed(2)+' (before costs)';$('plResult').className='result '+(v>=0?'green':'red')}
-function calcRR(){let e=+$('rrEntry').value,s=+$('rrStop').value,t=+$('rrTake').value,side=$('rrSide').value;if(!(Number.isFinite(e)&&Number.isFinite(s)&&Number.isFinite(t)))return $('rrResult').textContent='Check levels';let valid=side==='BUY'?(s<e&&t>e):(s>e&&t<e);if(!valid)return $('rrResult').textContent='Check '+side+' stop and target sides';let r=Math.abs(e-s),g=Math.abs(t-e);$('rrResult').textContent=r>0&&g>0?(g/r).toFixed(2)+':1 reward to risk':'Check levels'}
-function calcMargin(){let l=+$('mLots').value,p=+$('mPrice').value,c=+$('mContract').value,v=+$('mLev').value;$('mResult').textContent=l>0&&p>0&&c>0&&v>0?'≈ $'+(l*p*c/v).toFixed(2):'Check inputs'}
-function calcConvert(){let w=+$('weight').value,f=+$('weightUnit').value;if(w>0)$('convertResult').textContent=(w*f).toFixed(4)+' grams'}
-function calcDD(){let d=+$('dd').value;$('ddResult').textContent=d>=0&&d<100?((100/(100-d)-1)*100).toFixed(2)+'% gain required':'Enter drawdown below 100%'}
-function calcCompound(){let s=+$('cgStart').value,r=+$('cgRate').value,n=+$('cgPeriods').value;if(s>0&&r>-100&&n>0&&n<=1000)$('cgResult').textContent='$'+(s*Math.pow(1+r/100,n)).toFixed(2)}
-function openChecklist(){tool('checklist',document.querySelector('#toolTabs button:last-child'))}
-function renderChecklist(){$('checklistItems').innerHTML=['I know why I am considering this trade.','The setup matches my written plan.','I identified entry and invalidation.','Stop loss is set before entry.','Position size fits my risk limit.','I checked spread and upcoming news.','I am calm and not revenge trading.'].map((x,i)=>'<label class="check"><input type="checkbox" onchange="countChecks()"><span>'+x+'</span></label>').join('')}
-function countChecks(){let n=document.querySelectorAll('#checklistItems input:checked').length;$('checkCount').textContent=n+' / 7 complete'}
-let alerts=JSON.parse(localStorage.getItem('ngrProAlerts')||'[]');function renderAlerts(){$('alertList').innerHTML=alerts.length?alerts.map((a,i)=>'<div class="item"><div><b>XAU/USD '+a.cond+' '+a.level+'</b><div class="small muted">'+a.expiry+' · Saved locally</div></div><button class="btn secondary" onclick="removeAlert('+i+')">Delete</button></div>').join(''):'No alerts created.'}
-function createAlert(){let n=+$('alertLevel').value;if(!(n>0))return alert('Enter a valid price level.');alerts.push({cond:$('alertCond').value,level:n,expiry:$('alertExpiry').value});localStorage.setItem('ngrProAlerts',JSON.stringify(alerts));$('alertLevel').value='';$('alertForm').classList.add('hide');renderAlerts()}
-function removeAlert(i){alerts.splice(i,1);localStorage.setItem('ngrProAlerts',JSON.stringify(alerts));renderAlerts()}
-function setTheme(t){document.documentElement.classList.toggle('light',t==='light');localStorage.setItem('ngrTheme',t)}
-function savePrefs(){let n=+$('maxRisk').value;if(!(n>=.1&&n<=5))return alert('Maximum risk must be between 0.1% and 5%.');localStorage.setItem('ngrMaxRisk',n);localStorage.setItem('ngrProLevel',$('levelSelect').value);alert('Preferences saved on this device.')}
-function chooseLevel(v,btn){selectedLevel=v;document.querySelectorAll('#welcomeModal .row .pill').forEach(x=>x.classList.remove('selected'));btn.classList.add('selected')}
-function finishWelcome(skip){if(!$('riskAgree').checked)return alert('Please accept the risk disclaimer to continue.');localStorage.setItem('ngrWelcome','1');localStorage.setItem('ngrProLevel',selectedLevel);$('levelSelect').value=selectedLevel;$('welcomeModal').classList.remove('open')}
-function init(){setTheme(localStorage.getItem('ngrTheme')||'dark');$('themeSelect').value=localStorage.getItem('ngrTheme')||'dark';$('maxRisk').value=localStorage.getItem('ngrMaxRisk')||'1';$('levelSelect').value=localStorage.getItem('ngrProLevel')||'Beginner';$('favBtn').textContent=localStorage.getItem('ngrFav')||'☆';renderCourses();renderRules();renderGlossary();renderQuiz();renderChecklist();renderAlerts();if(!localStorage.getItem('ngrWelcome'))$('welcomeModal').classList.add('open')}
-init();
-if('serviceWorker'in navigator&&location.protocol.startsWith('http'))addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
 </script></body></html>
