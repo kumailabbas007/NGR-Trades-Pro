@@ -53,7 +53,10 @@ body:not(.authenticated) header.top,body:not(.authenticated) main.wrap,body:not(
 <nav class="bottom" aria-label="Main navigation"><button class="active" data-screen="home" onclick="go('home')"><span>⌂</span>Home</button><button data-screen="charts" onclick="go('charts')"><span>⌁</span>Charts</button><button data-screen="learn" onclick="go('learn')"><span>▤</span>Learn</button><button data-screen="tools" onclick="go('tools')"><span>▦</span>Tools</button><button data-screen="alerts" onclick="go('alerts')"><span>♧</span>Alerts</button></nav>
 <div class="modal" id="welcomeModal"><div class="sheet"><div class="handle"></div><div class="logo" style="margin:auto;width:54px;height:54px;font-size:30px">K</div><h2 style="text-align:center;margin-top:14px">Welcome to NGR TRADES PRO</h2><p class="small muted" style="text-align:center">Learn gold trading step by step. Use charts and tools. Protect your capital with disciplined risk rules.</p><h3>Your experience level</h3><div class="row"><button class="pill selected" onclick="chooseLevel('Beginner',this)">Beginner</button><button class="pill" onclick="chooseLevel('Intermediate',this)">Intermediate</button><button class="pill" onclick="chooseLevel('Advanced',this)">Advanced</button></div><div class="warning" style="margin:16px 0">Trading carries high risk and you can lose your capital. NGR TRADES PRO is educational, not financial advice, and does not place trades.</div><label class="check"><input id="riskAgree" type="checkbox"><span>I understand and accept the trading risk disclaimer.</span></label><button class="btn" style="width:100%;margin-top:15px" onclick="finishWelcome()">Get started</button><button class="btn secondary" style="width:100%;margin-top:8px" onclick="finishWelcome(true)">Skip tutorial</button></div></div>
 <div class="modal" id="lessonModal"><div class="sheet"><div class="handle"></div><div class="cardhead"><span class="tag">BEGINNER COURSE</span><button class="iconbtn" onclick="closeLesson()">×</button></div><h2 id="lessonTitle"></h2><div class="small muted" id="lessonBody" style="font-size:15px;line-height:1.8"></div><div class="warning" style="margin:16px 0"><b>Key takeaway</b><p id="lessonTakeaway" style="margin:6px 0 0"></p></div><div class="row"><button class="btn secondary" onclick="closeLesson()">Close</button><button class="btn" onclick="completeLesson()">Mark complete ✓</button></div></div></div>
-<script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script><script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script><script>
+const firebaseConfig={apiKey:"AIzaSyByGI6THlwazGGLIKmi_vxEMFbuE1rlSqE",authDomain:"ngr-trades-pro.firebaseapp.com",projectId:"ngr-trades-pro",storageBucket:"ngr-trades-pro.firebasestorage.app",messagingSenderId:"683703712911",appId:"1:683703712911:web:30b3b91596bfbfb04a84fa",measurementId:"G-NYCE0CBQ0T"};
+firebase.initializeApp(firebaseConfig);
+const auth=firebase.auth();auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(e=>console.error("Auth persistence:",e));
 const $=id=>document.getElementById(id);let selectedLevel=localStorage.getItem('ngrProLevel')||'Beginner';
 const lessons=[
 ["What is gold trading? Why gold moves","Gold trading means taking a position on the price of gold. Gold can react to interest rates, inflation expectations, the US dollar, central-bank activity and market uncertainty.","Gold is influenced by several forces. No single headline guarantees a price direction."],
@@ -158,6 +161,26 @@ function chooseLevel(v,btn){selectedLevel=v;document.querySelectorAll('#welcomeM
 function finishWelcome(skip){if(!$('riskAgree').checked)return alert('Please accept the risk disclaimer to continue.');localStorage.setItem('ngrWelcome','1');localStorage.setItem('ngrProLevel',selectedLevel);$('levelSelect').value=selectedLevel;$('welcomeModal').classList.remove('open')}
 function init(){setTheme(localStorage.getItem('ngrTheme')||'dark');$('themeSelect').value=localStorage.getItem('ngrTheme')||'dark';$('maxRisk').value=localStorage.getItem('ngrMaxRisk')||'1';$('pRisk').value=localStorage.getItem('ngrMaxRisk')||'1';$('levelSelect').value=localStorage.getItem('ngrProLevel')||'Beginner';$('favBtn').textContent=localStorage.getItem('ngrFav')||'☆';renderCourses();renderRules();renderGlossary();renderQuiz();renderChecklist();}
 init();
+auth.onAuthStateChanged(async user=>{
+  if(user&&user.emailVerified){
+    document.body.classList.add("authenticated");$("authGate").classList.add("hide");$("verifyPanel").classList.add("hide");
+    if($("accountEmail"))$("accountEmail").textContent=user.email||"Google account";
+    try{
+      const headers=await authHeaders({"Content-Type":"application/json"});
+      const claimed=await fetch(ALERT_API+"/claim-device",{method:"POST",headers,body:JSON.stringify({deviceToken})});
+      if(!claimed.ok)throw Error("Alert migration HTTP "+claimed.status);
+      const result=await claimed.json();if(result.migrated>0)console.info("Migrated existing alerts:",result.migrated);
+    }catch(e){console.warn("Existing alert migration will retry:",e.message);}
+    syncAlerts();
+    if(!localStorage.getItem("ngrWelcome"))$("welcomeModal").classList.add("open");
+  }else{
+    document.body.classList.remove("authenticated");$("authGate").classList.remove("hide");
+    if($("accountEmail"))$("accountEmail").textContent="Not signed in";
+    if(user&&!user.emailVerified){showVerification();showAuthMessage("Please verify "+(user.email||"your email")+" to continue.");}
+    else $("verifyPanel").classList.add("hide");
+  }
+});
+auth.getRedirectResult().catch(e=>showAuthMessage(e.message||"Google sign-in failed."));
 window.addEventListener('focus',syncAlerts);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncAlerts()});
 if('serviceWorker'in navigator&&location.protocol.startsWith('http'))addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
