@@ -99,6 +99,7 @@ const { chromium } = require('playwright');
     await page.locator('#maxRisk').fill('0.5');
     await page.locator('#settings button').filter({ hasText: 'Save preferences' }).click();
     await page.locator('nav.bottom button[data-screen="tools"]').click();
+    await page.locator('#toolTabs button').filter({ hasText: 'Position size' }).click();
     if (await page.locator('#pRisk').inputValue() !== '0.5') throw new Error('Saved maximum risk was not applied to position sizing.');
     await page.locator('#pRisk').fill('1');
     await page.locator('#toolPosition button').filter({ hasText: 'Calculate' }).click();
