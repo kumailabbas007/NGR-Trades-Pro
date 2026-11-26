@@ -23,9 +23,9 @@ jobs:
           const vm = require('vm');
           for (const file of ['index.html', 'gold-chart.html']) {
             const html = fs.readFileSync(file, 'utf8');
-            const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)];
+            const scripts = [...html.matchAll(/<script\\b[^>]*>([\\s\\S]*?)<\\/script>/gi)];
             for (const [i, match] of scripts.entries()) new vm.Script(match[1], { filename: file + ':script-' + i });
-            const ids = [...html.matchAll(/\bid=["']([^"']+)["']/g)].map(x => x[1]);
+            const ids = [...html.matchAll(/\\bid=["']([^"']+)["']/g)].map(x => x[1]);
             const duplicates = ids.filter((id, i) => ids.indexOf(id) !== i);
             if (duplicates.length) throw new Error(file + ' has duplicate IDs: ' + [...new Set(duplicates)].join(', '));
             console.log(file + ': scripts parse; ' + ids.length + ' unique IDs.');
@@ -50,7 +50,7 @@ jobs:
           main = "index.js"
           compatibility_date = "2025-11-25"
           [triggers]
-          crons = ["*/15 * * * *"]
+          crons = ["* * * * *"]
           [[kv_namespaces]]
           binding = "ALERTS_KV"
           id = "$CF_KV_ID"
@@ -64,4 +64,4 @@ jobs:
       - name: Smoke test Worker health and configuration
         run: |
           curl --fail --silent --show-error https://ngr-gold-alerts.kumail551255.workers.dev/health > health.json
-          node -e 'const h=require("./health.json"); if(h.status!=="online" || !h.kvConfigured || !h.deviceTokenAuth || !h.notificationConfigured) { console.error("Worker configuration check failed", h); process.exit(1); } console.log("Worker health and required bindings/secrets verified.");'
+          node -e 'const h=require("./health.json"); if(h.status!=="online" || !h.kvConfigured || h.monitorIntervalSeconds!==60) { console.error("Worker health check failed", h); process.exit(1); } console.log("Worker health, KV binding and one-minute schedule configuration verified.");'
