@@ -49,7 +49,7 @@ async function sendNtfy(topic,title,message){
 export default {async fetch(request,env){
   const url=new URL(request.url),origin=request.headers.get("Origin")||"";
   if(request.method==="OPTIONS")return origin===ALLOWED_ORIGIN?new Response(null,{status:204,headers:corsHeaders()}):new Response(null,{status:403});
-  if(url.pathname==="/health"&&request.method==="GET")return json({status:"online",service:"NGR Gold Alerts",kvConfigured:Boolean(env.ALERTS_KV),auth:"firebase-id-token",monitorIntervalSeconds:60,storageMode:"firebase-uid-array-v1",build:"ngr-pro-phases-2026-11-27"});
+  if(url.pathname==="/health"&&request.method==="GET")return json({status:"online",service:"NGR Gold Alerts",kvConfigured:Boolean(env.ALERTS_KV),auth:"firebase-id-token",monitorIntervalSeconds:60,storageMode:"firebase-uid-array-v1",build:"ngr-pro-full-suite-2026-11-27"});
   if(origin!==ALLOWED_ORIGIN)return json({error:"Origin not allowed"},403);
   if(!env.ALERTS_KV)return json({error:"Storage unavailable"},503);
 
