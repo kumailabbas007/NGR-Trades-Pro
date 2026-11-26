@@ -6,8 +6,8 @@ const ALLOWED_EXPIRY = new Set(["Until deleted", "24 hours", "7 days"]);
 const PREFIX = "device-alerts:";
 function corsHeaders(){return {"Access-Control-Allow-Origin":ALLOWED_ORIGIN,"Access-Control-Allow-Headers":"Content-Type, Authorization","Access-Control-Allow-Methods":"GET, POST, DELETE, OPTIONS","Access-Control-Max-Age":"86400","Vary":"Origin"};}
 function json(data,status=200){return new Response(JSON.stringify(data),{status,headers:{"Content-Type":"application/json; charset=utf-8",...corsHeaders()}});}
-function token(request){const raw=request.headers.get("Authorization")||"";const h=raw.trim().replace(/^Bearer\s+/i,"").trim().replace(/^([\'"])(.*)\\1$/,"$2");return /^[a-f0-9]{64}$/i.test(h)?h.toLowerCase():null;}
-function tokenDiagnostics(request){const raw=request.headers.get("Authorization")||"";const value=raw.trim().replace(/^Bearer\\s+/i,"").trim();return {authorizationPresent:Boolean(raw),scheme:/^Bearer\\s+/i.test(raw.trim()),valueLength:value.length,hex64:/^[a-f0-9]{64}$/i.test(value),headerNameSeen:Boolean(request.headers.get("authorization"))};}
+function token(request){const raw=request.headers.get("Authorization")||"";const h=raw.trim().replace(/^Bearer\s+/i,"").trim().replace(/^(['"])(.*)\1$/,"$2");return /^[a-f0-9]{64}$/i.test(h)?h.toLowerCase():null;}
+function tokenDiagnostics(request){const raw=request.headers.get("Authorization")||"";const value=raw.trim().replace(/^Bearer\s+/i,"").trim();return {authorizationPresent:Boolean(raw),scheme:/^Bearer\s+/i.test(raw.trim()),valueLength:value.length,hex64:/^[a-f0-9]{64}$/i.test(value),headerNameSeen:Boolean(request.headers.get("authorization"))};}
 function expiryTime(expiry,now){if(expiry==="24 hours")return now+86400000;if(expiry==="7 days")return now+604800000;return null;}
 function validTopic(t){return typeof t==="string"&&/^[a-zA-Z0-9_-]{8,64}$/.test(t);}
 function clean(alerts){const now=Date.now();return Array.isArray(alerts)?alerts.filter(a=>a&&typeof a.id==="string"&&(!a.expiresAt||now<a.expiresAt)):[];}
