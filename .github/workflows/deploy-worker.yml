@@ -50,7 +50,7 @@ jobs:
           main = "index.js"
           compatibility_date = "2025-11-25"
           [triggers]
-          crons = ["* * * * *"]
+          crons = ["*/5 * * * *"]
           [[kv_namespaces]]
           binding = "ALERTS_KV"
           id = "$CF_KV_ID"
