@@ -6,7 +6,7 @@ const ALLOWED_EXPIRY = new Set(["Until deleted", "24 hours", "7 days"]);
 const PREFIX = "device-alerts:";
 function corsHeaders(){return {"Access-Control-Allow-Origin":ALLOWED_ORIGIN,"Access-Control-Allow-Headers":"Content-Type, Authorization","Access-Control-Allow-Methods":"GET, POST, DELETE, OPTIONS","Access-Control-Max-Age":"86400","Vary":"Origin"};}
 function json(data,status=200){return new Response(JSON.stringify(data),{status,headers:{"Content-Type":"application/json; charset=utf-8",...corsHeaders()}});}
-function token(request){const t=(request.headers.get("Authorization")||"").replace(/^Bearer\s+/i,"");return /^[a-f0-9]{64}$/i.test(t)?t.toLowerCase():null;}
+function token(request){const h=(request.headers.get("Authorization")||"").trim();const m=h.match(/^(?:Bearer\s+)?([a-f0-9]{64})$/i);return m?m[1].toLowerCase():null;}
 function expiryTime(expiry,now){if(expiry==="24 hours")return now+86400000;if(expiry==="7 days")return now+604800000;return null;}
 function validTopic(t){return typeof t==="string"&&/^[a-zA-Z0-9_-]{8,64}$/.test(t);}
 function clean(alerts){const now=Date.now();return Array.isArray(alerts)?alerts.filter(a=>a&&typeof a.id==="string"&&(!a.expiresAt||now<a.expiresAt)):[];}
