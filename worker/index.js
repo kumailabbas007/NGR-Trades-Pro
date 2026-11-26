@@ -49,13 +49,35 @@ async function sendNtfy(topic,title,message){
 export default {async fetch(request,env){
   const url=new URL(request.url),origin=request.headers.get("Origin")||"";
   if(request.method==="OPTIONS")return origin===ALLOWED_ORIGIN?new Response(null,{status:204,headers:corsHeaders()}):new Response(null,{status:403});
-  if(url.pathname==="/health"&&request.method==="GET")return json({status:"online",service:"NGR Gold Alerts",kvConfigured:Boolean(env.ALERTS_KV),auth:"firebase-id-token",monitorIntervalSeconds:60,storageMode:"firebase-uid-array-v1",build:"firebase-auth-2026-11-27"});
+  if(url.pathname==="/health"&&request.method==="GET")return json({status:"online",service:"NGR Gold Alerts",kvConfigured:Boolean(env.ALERTS_KV),auth:"firebase-id-token",monitorIntervalSeconds:60,storageMode:"firebase-uid-array-v1",build:"ngr-pro-phases-2026-11-27"});
   if(origin!==ALLOWED_ORIGIN)return json({error:"Origin not allowed"},403);
   if(!env.ALERTS_KV)return json({error:"Storage unavailable"},503);
 
   const user=await verifyUser(request);
   if(!user)return json({error:"Authentication required. Sign in with a verified Firebase account."},401);
   const key=USER_PREFIX+user.uid;
+
+  if(url.pathname==="/ai-coach"&&request.method==="POST"){
+    if(!env.GEMINI_API_KEY)return json({error:"AI provider not configured",detail:"ZYRO AI is not configured yet. Add GEMINI_API_KEY as a Cloudflare Worker secret."},503);
+    try{
+      const raw=await request.text();if(raw.length>5000)return json({error:"Question too large"},413);
+      let body;try{body=JSON.parse(raw);}catch{return json({error:"Invalid JSON"},400);}
+      const message=typeof body?.message==="string"?body.message.trim():"";
+      if(!message||message.length>2000)return json({error:"Enter a question up to 2,000 characters."},400);
+      const rateKey="ai-rate:"+user.uid,now=Date.now();let rate={start:now,count:0};
+      try{rate=await env.ALERTS_KV.get(rateKey,"json")||rate;}catch{}
+      if(now-Number(rate.start)>600000)rate={start:now,count:0};
+      if(Number(rate.count)>=8)return json({error:"AI rate limit reached",detail:"Please wait a few minutes before asking ZYRO again."},429);
+      rate.count=Number(rate.count||0)+1;await env.ALERTS_KV.put(rateKey,JSON.stringify(rate),{expirationTtl:600});
+      const prompt="You are ZYRO, a careful educational gold-trading coach inside NGR TRADES PRO. Explain concepts clearly for a beginner. Focus on XAU/USD education, technical analysis concepts, risk management, trading psychology and journal review. Never claim to know live market prices or current news unless the user supplies them. Do not give personalized financial advice, guaranteed predictions, or instructions to buy/sell now. Encourage position sizing, stop-loss planning, independent verification and demo practice. If asked for a signal, explain why a single signal is unreliable and provide an educational checklist instead. Keep the response concise and structured. User question: "+message;
+      const response=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key="+encodeURIComponent(env.GEMINI_API_KEY),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({systemInstruction:{parts:[{text:"You are ZYRO, an educational trading coach. You are not a financial adviser and must not issue guaranteed trade signals."}]},contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{temperature:0.4,maxOutputTokens:700}}),signal:AbortSignal.timeout(20000)});
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok){console.log("Gemini request failed:",response.status);return json({error:"AI provider request failed",detail:"The AI service could not complete this request. Try again later."},502);}
+      const answer=(data?.candidates?.[0]?.content?.parts||[]).map(p=>p.text||"").join("\n").trim();
+      if(!answer)return json({error:"Empty AI response"},502);
+      return json({success:true,answer});
+    }catch(e){return json({error:"AI service unavailable",detail:"ZYRO could not reach the AI provider. Please try again."},502);}
+  }
 
   // Move existing device-only alerts into the signed-in Firebase account once.
   if(url.pathname==="/claim-device"&&request.method==="POST"){
@@ -82,10 +104,11 @@ export default {async fetch(request,env){
     try{
       if(!(request.headers.get("Content-Type")||"").toLowerCase().includes("application/json"))return json({error:"JSON required"},415);
       const raw=await request.text();if(raw.length>4096)return json({error:"Too large"},413);let b;try{b=JSON.parse(raw);}catch{return json({error:"Invalid JSON"},400);}
-      const level=Number(b.level),condition=b.condition,expiry=ALLOWED_EXPIRY.has(b.expiry)?b.expiry:"Until deleted",topic=b.topic;
-      if(!Number.isFinite(level)||level<=0||level>1000000||!["above","below"].includes(condition)||!validTopic(topic))return json({error:"Invalid target, condition or topic"},400);
+      const level=Number(b.level),condition=b.condition,expiry=ALLOWED_EXPIRY.has(b.expiry)?b.expiry:"Until deleted",topic=b.topic,isPercent=condition==="percent_up"||condition==="percent_down";
+      if(!Number.isFinite(level)||level<=(isPercent?0:0)||level>(isPercent?20:1000000)||!["above","below","percent_up","percent_down"].includes(condition)||!validTopic(topic))return json({error:"Invalid target, movement, condition or topic"},400);
       const alerts=await read(env,key);if(alerts.length>=MAX_ALERTS_PER_DEVICE)return json({error:"Limit of 20 alerts per account"},429);
-      const now=Date.now(),alert={id:crypto.randomUUID(),symbol:"XAUUSD",condition,level,topic,createdAt:now,expiry,expiresAt:expiryTime(expiry,now)};
+      const baselinePrice=isPercent?(await getFreshPrice()).price:null;
+      const now=Date.now(),alert={id:crypto.randomUUID(),symbol:"XAUUSD",condition,level,baselinePrice,topic,createdAt:now,expiry,expiresAt:expiryTime(expiry,now)};
       alerts.push(alert);await env.ALERTS_KV.put(key,JSON.stringify(alerts));return json({success:true,alert},201);
     }catch(e){console.log("Alert create error:",e?.message||e);return json({error:"Alert storage failed",detail:String(e?.message||e)},503);}
   }
@@ -109,9 +132,9 @@ async function checkAlerts(env){
           const keep=[];let changed=false;
           for(const a of alerts){
             if(a.retryAfterAt&&Date.now()<a.retryAfterAt){keep.push(a);continue;}
-            const hit=a.condition==="above"?market.price>=a.level:market.price<=a.level;
+            let hit=false,targetText="";if(a.condition==="above"){hit=market.price>=a.level;targetText="Target at or above $"+Number(a.level).toFixed(2);}else if(a.condition==="below"){hit=market.price<=a.level;targetText="Target at or below $"+Number(a.level).toFixed(2);}else{const baseline=Number(a.baselinePrice),move=baseline>0?((market.price-baseline)/baseline)*100:0;hit=a.condition==="percent_up"?move>=Number(a.level):move<=-Number(a.level);targetText=(a.condition==="percent_up"?"Rise ":"Fall ")+Number(a.level).toFixed(2)+"% from baseline $"+baseline.toFixed(2)+" (current move "+(move>=0?"+":"")+move.toFixed(2)+"%).";}
             if(!hit){keep.push(a);continue;}
-            const msg=["NGR TRADES PRO | XAU/USD","Target "+a.condition+": $"+Number(a.level).toFixed(2),"Observed spot price: $"+market.price.toFixed(2),"Price timestamp: "+market.updatedAt,"Indicative spot price; broker prices may differ. Verify before acting."].join("\\n");
+            const msg=["NGR TRADES PRO | XAU/USD",targetText,"Observed spot price: $"+market.price.toFixed(2),"Price timestamp: "+market.updatedAt,"Indicative spot price; broker prices may differ. Verify before acting."].join("\\n");
             try{await sendNtfy(a.topic,"NGR Gold Price Alert",msg);changed=true;console.log("ntfy accepted alert:",a.id);}
             catch(e){if(e?.status===429){const delay=(e.retryAfterSeconds||900)*1000;a.retryAfterAt=Date.now()+delay;changed=true;console.log("ntfy rate limited; alert paused until retry:",a.id,delay);}keep.push(a);console.log("Alert delivery failed; will retry:",a.id,e?.message||e);}
           }
