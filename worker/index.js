@@ -88,7 +88,14 @@ export default {async fetch(request,env){
       const answer=(data?.candidates?.[0]?.content?.parts||[]).map(p=>p.text||"").join("\n").trim();
       if(!answer)return json({error:"Empty AI response"},502);
       return json({success:true,answer});
-    }catch(e){return json({error:"AI service unavailable",detail:"ZYRO could not reach the AI provider. Please try again."},502);}
+    }catch(e){
+      const errorName=String(e?.name||"Error").slice(0,60);
+      const rawMessage=String(e?.message||"Unknown fetch failure");
+      const safeMessage=rawMessage.replace(env.GEMINI_API_KEY||/\bAIza[\w-]{20,}\b/g,"[REDACTED]").replace(/[\r\n]+/g," ").slice(0,220);
+      console.log("Gemini network/runtime failure:",JSON.stringify({name:errorName,message:safeMessage}));
+      const detail=errorName==="TimeoutError"||errorName==="AbortError"?"The Gemini request timed out before a response arrived. Check Worker connectivity and retry.":"The Worker failed before Gemini returned an HTTP response ("+errorName+"). Check the Cloudflare Worker logs for the sanitized diagnostic.";
+      return json({error:"AI service unavailable",detail,providerStage:"connection"},502);
+    }
   }
 
   // Move existing device-only alerts into the signed-in Firebase account once.
