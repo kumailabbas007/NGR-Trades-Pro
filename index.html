@@ -167,7 +167,7 @@ function setTf(btn){document.querySelectorAll('#timeframes button').forEach(x=>x
 function toggleFav(){$('favBtn').textContent=$('favBtn').textContent==='☆'?'★':'☆';localStorage.setItem('ngrFav',$('favBtn').textContent)}
 function learnCategory(id,btn){document.querySelectorAll('#learnTabs button').forEach(x=>x.classList.remove('selected'));btn.classList.add('selected');document.querySelectorAll('.learnpanel').forEach(x=>x.classList.add('hide'));$('learn'+id.charAt(0).toUpperCase()+id.slice(1)).classList.remove('hide')}
 function renderCourses(){let done=JSON.parse(localStorage.getItem('ngrLessons')||'[]');$('courseList').innerHTML=lessons.map((l,i)=>'<div class="lesson"><button onclick="openLesson('+i+')"><div class="row"><div><span class="tag">LESSON '+(i+1)+'</span><div style="font-weight:600;margin-top:4px">'+l[0]+'</div></div><span class="gold">'+(done.includes(i)?'✓ DONE':'›')+'</span></div></button></div>').join('');let pct=Math.round(done.length/lessons.length*100);$('homeProgress').style.width=pct+'%';$('progressLabel').textContent=pct+'% COMPLETE';$('nextLesson').textContent=lessons.find((x,i)=>!done.includes(i))?.[0]||'Beginner course completed'}
-let lessonIndex=0;function openLesson(i){lessonIndex=i;$('lessonTitle').textContent=lessons[i][0];$('lessonBody').textContent=lessons[i][1];$('lessonTakeaway').textContent=lessons[i][2];$('lessonModal').classList.add('open')}function closeLesson(){$('lessonModal').classList.remove('open')}function completeLesson(){let d=JSON.parse(localStorage.getItem('ngrLessons')||'[]');if(!d.includes(lessonIndex))d.push(lessonIndex);localStorage.setItem('ngrLessons',JSON.stringify(d));closeLesson();renderCourses()}
+let lessonIndex=0;function openLesson(i){lessonIndex=i;$('lessonTitle').textContent=lessons[i][0];$('lessonBody').textContent=lessons[i][1];$('lessonTakeaway').textContent=lessons[i][2];$('lessonModal').classList.add('open')}function closeLesson(){$('lessonModal').classList.remove('open')}function completeLesson(){let d=JSON.parse(localStorage.getItem('ngrLessons')||'[]');if(!d.includes(lessonIndex))d.push(lessonIndex);localStorage.setItem('ngrLessons',JSON.stringify(d));closeLesson();renderCourses();updateProProgress()}
 function renderRules(){$('rulesList').innerHTML=rules.map((r,i)=>'<label class="check"><input type="checkbox" class="rulecheck"><span><b>'+(i+1)+'.</b> '+r+'</span></label>').join('')}
 function renderGlossary(){let q=($('glossSearch').value||'').toLowerCase();$('glossaryList').innerHTML=glossary.filter(x=>(x[0]+' '+x[1]).toLowerCase().includes(q)).map(x=>'<div class="lesson"><b>'+x[0]+'</b><p class="small muted">'+x[1]+'</p></div>').join('')||'<p class="muted">No matching terms.</p>'}
 const quiz=[["What does XAU/USD quote?",["Gold in US dollars","Silver in euros","Oil in dollars"],0],["What is the spread?",["The day's high-low","Difference between ask and bid","Your leverage"],1],["When should you define risk?",["After the trade","Before entry","Only after a loss"],1]];
@@ -240,7 +240,7 @@ function proTab(id,btn){document.querySelectorAll('#proTabs button').forEach(x=>
 function journalKey(){return 'ngrJournal_'+(auth.currentUser?.uid||'local');}
 function readJournal(){try{return JSON.parse(localStorage.getItem(journalKey())||'[]').filter(x=>x&&typeof x.id==='string');}catch(e){return [];}}
 function saveJournalTrade(){const symbol=$('jSymbol').value.trim().toUpperCase(),side=$('jSide').value,e=+$('jEntry').value,x=+$('jExit').value,l=+$('jLots').value,c=+$('jContract').value;if(!symbol||!(e>0&&x>0&&l>0&&c>0))return alert('Enter valid trade details.');const pnl=(x-e)*(side==='BUY'?1:-1)*l*c;const a=readJournal();a.unshift({id:crypto.randomUUID(),date:new Date().toISOString(),symbol,side,entry:e,exit:x,lots:l,contract:c,pnl,notes:$('jNotes').value.trim()});localStorage.setItem(journalKey(),JSON.stringify(a.slice(0,500)));$('jNotes').value='';renderJournal();}
-function renderJournal(){const a=readJournal(),wins=a.filter(x=>x.pnl>0).length,net=a.reduce((n,x)=>n+Number(x.pnl||0),0);$('jCount').textContent=a.length;$('jWinRate').textContent=(a.length?Math.round(wins/a.length*100):0)+'%';$('jNet').textContent=(net>=0?'+':'')+'$'+net.toFixed(2);$('jNet').className=net>=0?'green':'red';if(!a.length){$('journalList').textContent='No entries yet.';return;}const rows=a.slice(0,30).map(x=>{const row=document.createElement('div');row.className='item';const left=document.createElement('div');const b=document.createElement('b');b.textContent=x.symbol+' '+x.side+' · '+(x.pnl>=0?'+':'')+'$'+Number(x.pnl).toFixed(2);left.appendChild(b);const d=document.createElement('div');d.className='small muted';d.textContent=new Date(x.date).toLocaleString()+' · '+x.entry+' → '+x.exit+' · '+x.lots+' lots';left.appendChild(d);const del=document.createElement('button');del.className='btn secondary';del.textContent='Delete';del.onclick=()=>{localStorage.setItem(journalKey(),JSON.stringify(readJournal().filter(t=>t.id!==x.id)));renderJournal();};row.append(left,del);return row;});$('journalList').replaceChildren(...rows);}
+function renderJournal(){const a=readJournal(),wins=a.filter(x=>x.pnl>0),losses=a.filter(x=>x.pnl<0),net=a.reduce((n,x)=>n+Number(x.pnl||0),0),avgWin=wins.length?wins.reduce((n,x)=>n+x.pnl,0)/wins.length:0,avgLoss=losses.length?losses.reduce((n,x)=>n+x.pnl,0)/losses.length:0,grossWin=wins.reduce((n,x)=>n+x.pnl,0),grossLoss=Math.abs(losses.reduce((n,x)=>n+x.pnl,0)),pf=grossLoss?grossWin/grossLoss:(grossWin?'∞':'—');let eqv=0,peak=0,maxDD=0;a.slice().reverse().forEach(t=>{eqv+=Number(t.pnl||0);peak=Math.max(peak,eqv);maxDD=Math.max(maxDD,peak-eqv);});$('jCount').textContent=a.length;$('jWinRate').textContent=(a.length?Math.round(wins.length/a.length*100):0)+'%';$('jNet').textContent=(net>=0?'+':'')+'}const rows=a.slice(0,30).map(x=>{const row=document.createElement('div');row.className='item';const left=document.createElement('div');const b=document.createElement('b');b.textContent=x.symbol+' '+x.side+' · '+(x.pnl>=0?'+':'')+'$'+Number(x.pnl).toFixed(2);left.appendChild(b);const d=document.createElement('div');d.className='small muted';d.textContent=new Date(x.date).toLocaleString()+' · '+x.entry+' → '+x.exit+' · '+x.lots+' lots';left.appendChild(d);const del=document.createElement('button');del.className='btn secondary';del.textContent='Delete';del.onclick=()=>{localStorage.setItem(journalKey(),JSON.stringify(readJournal().filter(t=>t.id!==x.id)));renderJournal();};row.append(left,del);return row;});$('journalList').replaceChildren(...rows);}
 function exportJournal(){const a=readJournal();if(!a.length)return alert('No entries to export.');const cols=['date','symbol','side','entry','exit','lots','contract','pnl','notes'];const csv=[cols.join(','),...a.map(x=>cols.map(k=>'"'+String(x[k]??'').replace(/"/g,'""')+'"').join(','))].join(String.fromCharCode(10));const url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));const link=document.createElement('a');link.href=url;link.download='ngr-trading-journal.csv';link.click();URL.revokeObjectURL(url);}
 function calcSentiment(){const score=['sDollar','sYields','sRisk','sTech'].reduce((n,id)=>n+Number($(id).value),0);$('sentimentResult').textContent=(score>=2?'Bullish observations':score<=-2?'Bearish observations':'Mixed / neutral observations')+' · '+(score>0?'+':'')+score;$('sentimentExplain').textContent='Based only on your manual inputs. Verify source data independently; this is not a trade signal.';}
 function calcProRisk(){const b=+$('rpBalance').value,r=+$('rpRisk').value,e=+$('rpEntry').value,s=+$('rpStop').value,t=+$('rpTarget').value,c=+$('rpContract').value,max=Number(localStorage.getItem('ngrMaxRisk')||1),dist=Math.abs(e-s),reward=Math.abs(t-e),valid=b>0&&r>0&&e>0&&s>0&&t>0&&c>0&&dist>0&&((s<e&&t>e)||(s>e&&t<e));if(!valid){$('rpLots').textContent='Check levels';$('rpDetails').textContent='BUY requires stop below entry and target above; SELL requires the reverse.';return;}if(r>max){$('rpLots').textContent='Above saved max risk ('+max+'%)';$('rpDetails').textContent='Lower risk or adjust your maximum-risk preference in Settings.';return;}const cash=b*r/100,lots=cash/(dist*c),potential=reward*lots*c;$('rpLots').textContent=lots.toFixed(4)+' lots';$('rpDetails').textContent='Planned risk ≈ $'+cash.toFixed(2)+' · Potential gross reward ≈ $'+potential.toFixed(2)+' · R:R '+(reward/dist).toFixed(2)+':1. Excludes trading costs and broker volume constraints.';}
@@ -299,6 +299,578 @@ function savePrefs(){
 }
 function chooseLevel(v,btn){selectedLevel=v;document.querySelectorAll('#welcomeModal .row .pill').forEach(x=>x.classList.remove('selected'));btn.classList.add('selected')}
 function finishWelcome(skip){if(!$('riskAgree').checked)return alert('Please accept the risk disclaimer to continue.');localStorage.setItem('ngrWelcome','1');localStorage.setItem('ngrProLevel',selectedLevel);$('levelSelect').value=selectedLevel;$('welcomeModal').classList.remove('open')}
+function mountTVWidget(id,file,config){const host=$(id);if(!host||host.dataset.mounted)return;host.dataset.mounted='1';host.replaceChildren();const root=document.createElement('div');root.className='tradingview-widget-container';root.style.width='100%';const inner=document.createElement('div');inner.className='tradingview-widget-container__widget';inner.style.width='100%';root.appendChild(inner);const script=document.createElement('script');script.async=true;script.src='https://s3.tradingview.com/external-embedding/'+file;script.textContent=JSON.stringify(config);root.appendChild(script);host.appendChild(root);}
+function initLiveWidgets(){mountTVWidget('tvTechnical','embed-widget-technical-analysis.js',{interval:'1h',width:'100%',isTransparent:true,height:390,symbol:'OANDA:XAUUSD',showIntervalTabs:true,displayMode:'single',locale:'en',colorTheme:'dark'});mountTVWidget('tvEvents','embed-widget-events.js',{width:'100%',height:480,colorTheme:'dark',isTransparent:true,locale:'en',importanceFilter:'-1,0,1',countryFilter:'us'});mountTVWidget('tvNews','embed-widget-timeline.js',{feedMode:'market',market:'commodities',width:'100%',height:420,colorTheme:'dark',isTransparent:true,displayMode:'regular',locale:'en'});}
+function updateSessionClocks(){const sessions=[['Tokyo','Asia/Tokyo',0,9],['London','Europe/London',8,17],['NewYork','America/New_York',8,17]],now=new Date();sessions.forEach(([key,zone,start,end])=>{const parts=new Intl.DateTimeFormat('en-GB',{timeZone:zone,hour:'2-digit',minute:'2-digit',hourCycle:'h23',weekday:'short'}).formatToParts(now),hour=Number(parts.find(p=>p.type==='hour')?.value||0),minute=Number(parts.find(p=>p.type==='minute')?.value||0),day=parts.find(p=>p.type==='weekday')?.value||'',open=day!=='Sat'&&day!=='Sun'&&hour>=start&&hour<end;const st=$('session'+key),tm=$('time'+key);if(st)st.textContent=open?'OPEN':'CLOSED';if(tm)tm.textContent=String(hour).padStart(2,'0')+':'+String(minute).padStart(2,'0')+' local';});const local=$('sessionLocal');if(local)local.textContent='Pakistan time · '+new Intl.DateTimeFormat('en-PK',{timeZone:'Asia/Karachi',dateStyle:'medium',timeStyle:'short'}).format(now)+' · Approximate session windows.';}
+function updateAlertCondition(){const c=$('alertCond')?.value,pct=c==='percent_up'||c==='percent_down';$('alertPriceField')?.classList.toggle('hide',pct);$('alertPercentField')?.classList.toggle('hide',!pct);}
+function touchLearningStreak(){const uid=auth.currentUser?.uid||'local',key='ngrLearningStreak_'+uid,today=new Date().toISOString().slice(0,10);let d={last:'',count:0};try{d=JSON.parse(localStorage.getItem(key)||'{}')}catch(e){}if(d.last!==today){const y=new Date();y.setDate(y.getDate()-1);d.count=d.last===y.toISOString().slice(0,10)?(Number(d.count)||0)+1:1;d.last=today;localStorage.setItem(key,JSON.stringify(d));}return Number(d.count)||1;}
+function updateProProgress(){const done=JSON.parse(localStorage.getItem('ngrLessons')||'[]'),pct=Math.round(done.length/lessons.length*100),trades=readJournal(),streak=touchLearningStreak();if($('progressLessons'))$('progressLessons').textContent=pct+'%';if($('progressStreak'))$('progressStreak').textContent=streak+' days';if($('progressTrades'))$('progressTrades').textContent=trades.length;if($('progressBarPro'))$('progressBarPro').style.width=pct+'%';const items=[['🌱','First steps','Complete your first lesson',done.length>=1],['📚','Student','Complete 5 lessons',done.length>=5],['🎓','Graduate','Complete every beginner lesson',done.length>=lessons.length],['🔥','Consistency','Build a 3-day learning streak',streak>=3],['📝','Journal keeper','Record your first trade',trades.length>=1],['📊','Review pro','Record 10 trades',trades.length>=10],['🛡️','Risk first','Complete the pre-trade checklist',localStorage.getItem('ngrChecklistDone')==='1']];const grid=$('achievementGrid');if(grid)grid.replaceChildren(...items.map(([emoji,name,desc,ok])=>{const el=document.createElement('div');el.className='achievement'+(ok?'':' locked');const icon=document.createElement('span'),body=document.createElement('div'),b=document.createElement('b'),sm=document.createElement('small');icon.textContent=emoji;b.textContent=name;sm.textContent=desc;body.append(b,sm);el.append(icon,body);return el;}));}
+function addZyroMessage(message,who){const host=$('zyroConversation');if(!host)return;const el=document.createElement('div');el.className='zyro-message '+(who==='user'?'zyro-user':'zyro-bot');el.textContent=message;host.appendChild(el);host.scrollTop=host.scrollHeight;}
+async function askZyroCoach(){const box=$('zyroQuestion'),btn=$('zyroSend'),status=$('zyroStatus'),message=box.value.trim();if(!message)return;if(message.length>2000)return alert('Keep your question under 2,000 characters.');addZyroMessage(message,'user');box.value='';btn.disabled=true;btn.textContent='Thinking…';status.textContent='Connecting securely to ZYRO…';try{const r=await fetch(ALERT_API+'/ai-coach',{method:'POST',headers:await authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({message})}),d=await r.json();if(!r.ok)throw Error(d.detail||d.error||'HTTP '+r.status);addZyroMessage(d.answer||'No response returned.','bot');status.textContent='Educational response · Verify important information independently.';}catch(e){addZyroMessage('I could not connect right now. '+e.message,'bot');status.textContent=e.message.includes('not configured')?'AI provider setup is still required on the secure server.':'Connection unavailable. Please try again later.';}finally{btn.disabled=false;btn.textContent='Ask ZYRO';}}
+function init(){setTheme(localStorage.getItem('ngrTheme')||'dark');$('themeSelect').value=localStorage.getItem('ngrTheme')||'dark';$('maxRisk').value=localStorage.getItem('ngrMaxRisk')||'1';$('pRisk').value=localStorage.getItem('ngrMaxRisk')||'1';$('levelSelect').value=localStorage.getItem('ngrProLevel')||'Beginner';$('favBtn').textContent=localStorage.getItem('ngrFav')||'☆';renderCourses();renderRules();renderGlossary();renderQuiz();renderChecklist();renderEventChecklist();renderJournal();updateAlertCondition();initLiveWidgets();updateSessionClocks();updateProProgress();setInterval(updateSessionClocks,60000);}
+init();
+auth.onAuthStateChanged(async user=>{
+  if(user&&user.emailVerified){
+    document.body.classList.add("authenticated");$("authGate").classList.add("hide");$("verifyPanel").classList.add("hide");
+    if($("accountEmail"))$("accountEmail").textContent=user.email||"Google account";
+    if($("profileName"))renderProfile();
+    try{
+      const headers=await authHeaders({"Content-Type":"application/json"});
+      const claimed=await fetch(ALERT_API+"/claim-device",{method:"POST",headers,body:JSON.stringify({deviceToken})});
+      if(!claimed.ok)throw Error("Alert migration HTTP "+claimed.status);
+      const result=await claimed.json();if(result.migrated>0)console.info("Migrated existing alerts:",result.migrated);
+    }catch(e){console.warn("Existing alert migration will retry:",e.message);}
+    syncAlerts();touchLearningStreak();updateProProgress();
+    if(!localStorage.getItem("ngrWelcome"))$("welcomeModal").classList.add("open");
+  }else{
+    document.body.classList.remove("authenticated");$("authGate").classList.remove("hide");
+    if($("profileName")){ $("profileName").value=""; $("profileDisplayName").textContent="Your name"; }
+    if($("accountEmail"))$("accountEmail").textContent="Not signed in";
+    if(user&&!user.emailVerified){showVerification();showAuthMessage("Please verify "+(user.email||"your email")+" to continue.");}
+    else $("verifyPanel").classList.add("hide");
+  }
+});
+auth.getRedirectResult().catch(e=>showAuthMessage(e.message||"Google sign-in failed."));
+window.addEventListener('focus',syncAlerts);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncAlerts()});
+if('serviceWorker'in navigator&&location.protocol.startsWith('http'))addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+</script></body></html>+net.toFixed(2);$('jNet').className=net>=0?'green':'red';if($('jAvgWin'))$('jAvgWin').textContent='}const rows=a.slice(0,30).map(x=>{const row=document.createElement('div');row.className='item';const left=document.createElement('div');const b=document.createElement('b');b.textContent=x.symbol+' '+x.side+' · '+(x.pnl>=0?'+':'')+'$'+Number(x.pnl).toFixed(2);left.appendChild(b);const d=document.createElement('div');d.className='small muted';d.textContent=new Date(x.date).toLocaleString()+' · '+x.entry+' → '+x.exit+' · '+x.lots+' lots';left.appendChild(d);const del=document.createElement('button');del.className='btn secondary';del.textContent='Delete';del.onclick=()=>{localStorage.setItem(journalKey(),JSON.stringify(readJournal().filter(t=>t.id!==x.id)));renderJournal();};row.append(left,del);return row;});$('journalList').replaceChildren(...rows);}
+function exportJournal(){const a=readJournal();if(!a.length)return alert('No entries to export.');const cols=['date','symbol','side','entry','exit','lots','contract','pnl','notes'];const csv=[cols.join(','),...a.map(x=>cols.map(k=>'"'+String(x[k]??'').replace(/"/g,'""')+'"').join(','))].join(String.fromCharCode(10));const url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));const link=document.createElement('a');link.href=url;link.download='ngr-trading-journal.csv';link.click();URL.revokeObjectURL(url);}
+function calcSentiment(){const score=['sDollar','sYields','sRisk','sTech'].reduce((n,id)=>n+Number($(id).value),0);$('sentimentResult').textContent=(score>=2?'Bullish observations':score<=-2?'Bearish observations':'Mixed / neutral observations')+' · '+(score>0?'+':'')+score;$('sentimentExplain').textContent='Based only on your manual inputs. Verify source data independently; this is not a trade signal.';}
+function calcProRisk(){const b=+$('rpBalance').value,r=+$('rpRisk').value,e=+$('rpEntry').value,s=+$('rpStop').value,t=+$('rpTarget').value,c=+$('rpContract').value,max=Number(localStorage.getItem('ngrMaxRisk')||1),dist=Math.abs(e-s),reward=Math.abs(t-e),valid=b>0&&r>0&&e>0&&s>0&&t>0&&c>0&&dist>0&&((s<e&&t>e)||(s>e&&t<e));if(!valid){$('rpLots').textContent='Check levels';$('rpDetails').textContent='BUY requires stop below entry and target above; SELL requires the reverse.';return;}if(r>max){$('rpLots').textContent='Above saved max risk ('+max+'%)';$('rpDetails').textContent='Lower risk or adjust your maximum-risk preference in Settings.';return;}const cash=b*r/100,lots=cash/(dist*c),potential=reward*lots*c;$('rpLots').textContent=lots.toFixed(4)+' lots';$('rpDetails').textContent='Planned risk ≈ $'+cash.toFixed(2)+' · Potential gross reward ≈ $'+potential.toFixed(2)+' · R:R '+(reward/dist).toFixed(2)+':1. Excludes trading costs and broker volume constraints.';}
+function runGoldAnalyst(){const score=['aStructure','aLocation','aConfirm'].reduce((n,id)=>n+Number($(id).value),0),news=Number($('aNews').value);$('analystResult').textContent=(score>=2?'Bullish factors align':score<=-2?'Bearish factors align':'Setup is mixed / unclear')+' · score '+(score>0?'+':'')+score;$('analystExplain').textContent='Timeframe: '+$('aTime').value+'. '+(news===-1?'News risk flagged; consider waiting.':news===0?'News not verified; check the live calendar.':'You marked news checked; independently confirm it.')+' This is a rules-based summary, not AI, a forecast or a buy/sell signal.';}
+function renderEventChecklist(){$('eventChecklist').innerHTML=['FOMC / Fed decision','US CPI and PCE inflation','US employment / NFP','Federal Reserve speeches','US dollar and Treasury yield moves'].map(x=>'<label class="check"><input type="checkbox"><span>'+x+'</span></label>').join('');}
+function profilePhotoKey(){return 'ngrProfilePhoto_'+(auth.currentUser?.uid||'local');}
+function renderProfile(){
+  const u=auth.currentUser;if(!u)return;
+  const name=u.displayName||'';
+  $('profileName').value=name;
+  $('profileDisplayName').textContent=name||'Your name';
+  $('profileInitial').textContent=(name.trim()[0]||u.email?.[0]||'N').toUpperCase();
+  const photo=localStorage.getItem(profilePhotoKey())||u.photoURL||'';
+  if(photo){$('profilePreview').src=photo;$('profilePreview').style.display='block';$('profileInitial').style.display='none';}
+  else{$('profilePreview').style.display='none';$('profileInitial').style.display='grid';}
+  const avatarImg=$('settingsAvatarImg'),avatarInitial=$('settingsAvatarInitial');
+  if(avatarImg&&avatarInitial){if(photo){avatarImg.src=photo;avatarImg.style.display='block';avatarInitial.style.display='none';}else{avatarImg.removeAttribute('src');avatarImg.style.display='none';avatarInitial.textContent=(name.trim()[0]||u.email?.[0]||'N').toUpperCase();avatarInitial.style.display='grid';}}
+}
+function handleProfilePhoto(input){
+  const file=input.files&&input.files[0];if(!file)return;
+  if(!file.type.startsWith('image/')){alert('Please choose an image file.');input.value='';return;}
+  if(file.size>8*1024*1024){alert('Please choose an image smaller than 8 MB.');input.value='';return;}
+  const reader=new FileReader();
+  reader.onload=()=>{const img=new Image();img.onload=()=>{
+    const canvas=document.createElement('canvas');const scale=Math.min(1,256/Math.max(img.width,img.height));canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);
+    canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+    const data=canvas.toDataURL('image/jpeg',0.78);
+    try{localStorage.setItem(profilePhotoKey(),data);renderProfile();$('profileStatus').textContent='Photo saved on this device. Tap Save profile to save your name.';}
+    catch(e){alert('Could not save this photo. Please choose a smaller image or clear some device storage.');}
+  };img.onerror=()=>alert('Could not read this image. Please try another.');img.src=reader.result;};
+  reader.readAsDataURL(file);
+}
+async function saveProfile(){
+  const name=$('profileName').value.trim();if(!name)return alert('Please enter your name.');
+  const btn=document.querySelector('[onclick="saveProfile()"]');if(btn){btn.disabled=true;btn.textContent='Saving…';}
+  try{await auth.currentUser.updateProfile({displayName:name});renderProfile();$('profileStatus').textContent='Your name has been saved to your sign-in account. Your photo is saved on this device.';}
+  catch(e){$('profileStatus').textContent='Could not save your name: '+e.message;}
+  finally{if(btn){btn.disabled=false;btn.textContent='Save profile';}}
+}
+function submitFeedback(){
+  const type=$('feedbackType').value;const message=$('feedbackMessage').value.trim();
+  if(!message)return alert('Please describe your feedback first.');
+  const title=type+': '+message.slice(0,65).replace(/\s+/g,' ');
+  const body='Feedback type: '+type+'\n\n'+message+'\n\nApp: NGR TRADES PRO\nSigned-in account: '+(auth.currentUser?.email||'Not available');
+  const url='https://github.com/kumailabbas007/NGR-Trades-Pro/issues/new?title='+encodeURIComponent(title)+'&body='+encodeURIComponent(body);
+  window.open(url,'_blank','noopener');
+}
+function setTheme(t){document.documentElement.classList.toggle('light',t==='light');localStorage.setItem('ngrTheme',t);}
+function savePrefs(){
+  const maxRisk=Number($('maxRisk').value);
+  if(!(maxRisk>=0.1&&maxRisk<=5))return alert('Maximum risk must be between 0.1% and 5%.');
+  localStorage.setItem('ngrMaxRisk',maxRisk);
+  localStorage.setItem('ngrProLevel',$('levelSelect').value);
+  $('pRisk').value=String(maxRisk);
+  alert('Preferences saved on this device. Position sizing now enforces this maximum.');
+}
+function chooseLevel(v,btn){selectedLevel=v;document.querySelectorAll('#welcomeModal .row .pill').forEach(x=>x.classList.remove('selected'));btn.classList.add('selected')}
+function finishWelcome(skip){if(!$('riskAgree').checked)return alert('Please accept the risk disclaimer to continue.');localStorage.setItem('ngrWelcome','1');localStorage.setItem('ngrProLevel',selectedLevel);$('levelSelect').value=selectedLevel;$('welcomeModal').classList.remove('open')}
+function mountTVWidget(id,file,config){const host=$(id);if(!host||host.dataset.mounted)return;host.dataset.mounted='1';host.replaceChildren();const root=document.createElement('div');root.className='tradingview-widget-container';root.style.width='100%';const inner=document.createElement('div');inner.className='tradingview-widget-container__widget';inner.style.width='100%';root.appendChild(inner);const script=document.createElement('script');script.async=true;script.src='https://s3.tradingview.com/external-embedding/'+file;script.textContent=JSON.stringify(config);root.appendChild(script);host.appendChild(root);}
+function initLiveWidgets(){mountTVWidget('tvTechnical','embed-widget-technical-analysis.js',{interval:'1h',width:'100%',isTransparent:true,height:390,symbol:'OANDA:XAUUSD',showIntervalTabs:true,displayMode:'single',locale:'en',colorTheme:'dark'});mountTVWidget('tvEvents','embed-widget-events.js',{width:'100%',height:480,colorTheme:'dark',isTransparent:true,locale:'en',importanceFilter:'-1,0,1',countryFilter:'us'});mountTVWidget('tvNews','embed-widget-timeline.js',{feedMode:'market',market:'commodities',width:'100%',height:420,colorTheme:'dark',isTransparent:true,displayMode:'regular',locale:'en'});}
+function updateSessionClocks(){const sessions=[['Tokyo','Asia/Tokyo',0,9],['London','Europe/London',8,17],['NewYork','America/New_York',8,17]],now=new Date();sessions.forEach(([key,zone,start,end])=>{const parts=new Intl.DateTimeFormat('en-GB',{timeZone:zone,hour:'2-digit',minute:'2-digit',hourCycle:'h23',weekday:'short'}).formatToParts(now),hour=Number(parts.find(p=>p.type==='hour')?.value||0),minute=Number(parts.find(p=>p.type==='minute')?.value||0),day=parts.find(p=>p.type==='weekday')?.value||'',open=day!=='Sat'&&day!=='Sun'&&hour>=start&&hour<end;const st=$('session'+key),tm=$('time'+key);if(st)st.textContent=open?'OPEN':'CLOSED';if(tm)tm.textContent=String(hour).padStart(2,'0')+':'+String(minute).padStart(2,'0')+' local';});const local=$('sessionLocal');if(local)local.textContent='Pakistan time · '+new Intl.DateTimeFormat('en-PK',{timeZone:'Asia/Karachi',dateStyle:'medium',timeStyle:'short'}).format(now)+' · Approximate session windows.';}
+function updateAlertCondition(){const c=$('alertCond')?.value,pct=c==='percent_up'||c==='percent_down';$('alertPriceField')?.classList.toggle('hide',pct);$('alertPercentField')?.classList.toggle('hide',!pct);}
+function touchLearningStreak(){const uid=auth.currentUser?.uid||'local',key='ngrLearningStreak_'+uid,today=new Date().toISOString().slice(0,10);let d={last:'',count:0};try{d=JSON.parse(localStorage.getItem(key)||'{}')}catch(e){}if(d.last!==today){const y=new Date();y.setDate(y.getDate()-1);d.count=d.last===y.toISOString().slice(0,10)?(Number(d.count)||0)+1:1;d.last=today;localStorage.setItem(key,JSON.stringify(d));}return Number(d.count)||1;}
+function updateProProgress(){const done=JSON.parse(localStorage.getItem('ngrLessons')||'[]'),pct=Math.round(done.length/lessons.length*100),trades=readJournal(),streak=touchLearningStreak();if($('progressLessons'))$('progressLessons').textContent=pct+'%';if($('progressStreak'))$('progressStreak').textContent=streak+' days';if($('progressTrades'))$('progressTrades').textContent=trades.length;if($('progressBarPro'))$('progressBarPro').style.width=pct+'%';const items=[['🌱','First steps','Complete your first lesson',done.length>=1],['📚','Student','Complete 5 lessons',done.length>=5],['🎓','Graduate','Complete every beginner lesson',done.length>=lessons.length],['🔥','Consistency','Build a 3-day learning streak',streak>=3],['📝','Journal keeper','Record your first trade',trades.length>=1],['📊','Review pro','Record 10 trades',trades.length>=10],['🛡️','Risk first','Complete the pre-trade checklist',localStorage.getItem('ngrChecklistDone')==='1']];const grid=$('achievementGrid');if(grid)grid.replaceChildren(...items.map(([emoji,name,desc,ok])=>{const el=document.createElement('div');el.className='achievement'+(ok?'':' locked');const icon=document.createElement('span'),body=document.createElement('div'),b=document.createElement('b'),sm=document.createElement('small');icon.textContent=emoji;b.textContent=name;sm.textContent=desc;body.append(b,sm);el.append(icon,body);return el;}));}
+function addZyroMessage(message,who){const host=$('zyroConversation');if(!host)return;const el=document.createElement('div');el.className='zyro-message '+(who==='user'?'zyro-user':'zyro-bot');el.textContent=message;host.appendChild(el);host.scrollTop=host.scrollHeight;}
+async function askZyroCoach(){const box=$('zyroQuestion'),btn=$('zyroSend'),status=$('zyroStatus'),message=box.value.trim();if(!message)return;if(message.length>2000)return alert('Keep your question under 2,000 characters.');addZyroMessage(message,'user');box.value='';btn.disabled=true;btn.textContent='Thinking…';status.textContent='Connecting securely to ZYRO…';try{const r=await fetch(ALERT_API+'/ai-coach',{method:'POST',headers:await authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({message})}),d=await r.json();if(!r.ok)throw Error(d.detail||d.error||'HTTP '+r.status);addZyroMessage(d.answer||'No response returned.','bot');status.textContent='Educational response · Verify important information independently.';}catch(e){addZyroMessage('I could not connect right now. '+e.message,'bot');status.textContent=e.message.includes('not configured')?'AI provider setup is still required on the secure server.':'Connection unavailable. Please try again later.';}finally{btn.disabled=false;btn.textContent='Ask ZYRO';}}
+function init(){setTheme(localStorage.getItem('ngrTheme')||'dark');$('themeSelect').value=localStorage.getItem('ngrTheme')||'dark';$('maxRisk').value=localStorage.getItem('ngrMaxRisk')||'1';$('pRisk').value=localStorage.getItem('ngrMaxRisk')||'1';$('levelSelect').value=localStorage.getItem('ngrProLevel')||'Beginner';$('favBtn').textContent=localStorage.getItem('ngrFav')||'☆';renderCourses();renderRules();renderGlossary();renderQuiz();renderChecklist();renderEventChecklist();renderJournal();}
+init();
+auth.onAuthStateChanged(async user=>{
+  if(user&&user.emailVerified){
+    document.body.classList.add("authenticated");$("authGate").classList.add("hide");$("verifyPanel").classList.add("hide");
+    if($("accountEmail"))$("accountEmail").textContent=user.email||"Google account";
+    if($("profileName"))renderProfile();
+    try{
+      const headers=await authHeaders({"Content-Type":"application/json"});
+      const claimed=await fetch(ALERT_API+"/claim-device",{method:"POST",headers,body:JSON.stringify({deviceToken})});
+      if(!claimed.ok)throw Error("Alert migration HTTP "+claimed.status);
+      const result=await claimed.json();if(result.migrated>0)console.info("Migrated existing alerts:",result.migrated);
+    }catch(e){console.warn("Existing alert migration will retry:",e.message);}
+    syncAlerts();
+    if(!localStorage.getItem("ngrWelcome"))$("welcomeModal").classList.add("open");
+  }else{
+    document.body.classList.remove("authenticated");$("authGate").classList.remove("hide");
+    if($("profileName")){ $("profileName").value=""; $("profileDisplayName").textContent="Your name"; }
+    if($("accountEmail"))$("accountEmail").textContent="Not signed in";
+    if(user&&!user.emailVerified){showVerification();showAuthMessage("Please verify "+(user.email||"your email")+" to continue.");}
+    else $("verifyPanel").classList.add("hide");
+  }
+});
+auth.getRedirectResult().catch(e=>showAuthMessage(e.message||"Google sign-in failed."));
+window.addEventListener('focus',syncAlerts);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncAlerts()});
+if('serviceWorker'in navigator&&location.protocol.startsWith('http'))addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+</script></body></html>+avgWin.toFixed(2);if($('jAvgLoss'))$('jAvgLoss').textContent=(avgLoss<0?'-':'')+'}const rows=a.slice(0,30).map(x=>{const row=document.createElement('div');row.className='item';const left=document.createElement('div');const b=document.createElement('b');b.textContent=x.symbol+' '+x.side+' · '+(x.pnl>=0?'+':'')+'$'+Number(x.pnl).toFixed(2);left.appendChild(b);const d=document.createElement('div');d.className='small muted';d.textContent=new Date(x.date).toLocaleString()+' · '+x.entry+' → '+x.exit+' · '+x.lots+' lots';left.appendChild(d);const del=document.createElement('button');del.className='btn secondary';del.textContent='Delete';del.onclick=()=>{localStorage.setItem(journalKey(),JSON.stringify(readJournal().filter(t=>t.id!==x.id)));renderJournal();};row.append(left,del);return row;});$('journalList').replaceChildren(...rows);}
+function exportJournal(){const a=readJournal();if(!a.length)return alert('No entries to export.');const cols=['date','symbol','side','entry','exit','lots','contract','pnl','notes'];const csv=[cols.join(','),...a.map(x=>cols.map(k=>'"'+String(x[k]??'').replace(/"/g,'""')+'"').join(','))].join(String.fromCharCode(10));const url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));const link=document.createElement('a');link.href=url;link.download='ngr-trading-journal.csv';link.click();URL.revokeObjectURL(url);}
+function calcSentiment(){const score=['sDollar','sYields','sRisk','sTech'].reduce((n,id)=>n+Number($(id).value),0);$('sentimentResult').textContent=(score>=2?'Bullish observations':score<=-2?'Bearish observations':'Mixed / neutral observations')+' · '+(score>0?'+':'')+score;$('sentimentExplain').textContent='Based only on your manual inputs. Verify source data independently; this is not a trade signal.';}
+function calcProRisk(){const b=+$('rpBalance').value,r=+$('rpRisk').value,e=+$('rpEntry').value,s=+$('rpStop').value,t=+$('rpTarget').value,c=+$('rpContract').value,max=Number(localStorage.getItem('ngrMaxRisk')||1),dist=Math.abs(e-s),reward=Math.abs(t-e),valid=b>0&&r>0&&e>0&&s>0&&t>0&&c>0&&dist>0&&((s<e&&t>e)||(s>e&&t<e));if(!valid){$('rpLots').textContent='Check levels';$('rpDetails').textContent='BUY requires stop below entry and target above; SELL requires the reverse.';return;}if(r>max){$('rpLots').textContent='Above saved max risk ('+max+'%)';$('rpDetails').textContent='Lower risk or adjust your maximum-risk preference in Settings.';return;}const cash=b*r/100,lots=cash/(dist*c),potential=reward*lots*c;$('rpLots').textContent=lots.toFixed(4)+' lots';$('rpDetails').textContent='Planned risk ≈ $'+cash.toFixed(2)+' · Potential gross reward ≈ $'+potential.toFixed(2)+' · R:R '+(reward/dist).toFixed(2)+':1. Excludes trading costs and broker volume constraints.';}
+function runGoldAnalyst(){const score=['aStructure','aLocation','aConfirm'].reduce((n,id)=>n+Number($(id).value),0),news=Number($('aNews').value);$('analystResult').textContent=(score>=2?'Bullish factors align':score<=-2?'Bearish factors align':'Setup is mixed / unclear')+' · score '+(score>0?'+':'')+score;$('analystExplain').textContent='Timeframe: '+$('aTime').value+'. '+(news===-1?'News risk flagged; consider waiting.':news===0?'News not verified; check the live calendar.':'You marked news checked; independently confirm it.')+' This is a rules-based summary, not AI, a forecast or a buy/sell signal.';}
+function renderEventChecklist(){$('eventChecklist').innerHTML=['FOMC / Fed decision','US CPI and PCE inflation','US employment / NFP','Federal Reserve speeches','US dollar and Treasury yield moves'].map(x=>'<label class="check"><input type="checkbox"><span>'+x+'</span></label>').join('');}
+function profilePhotoKey(){return 'ngrProfilePhoto_'+(auth.currentUser?.uid||'local');}
+function renderProfile(){
+  const u=auth.currentUser;if(!u)return;
+  const name=u.displayName||'';
+  $('profileName').value=name;
+  $('profileDisplayName').textContent=name||'Your name';
+  $('profileInitial').textContent=(name.trim()[0]||u.email?.[0]||'N').toUpperCase();
+  const photo=localStorage.getItem(profilePhotoKey())||u.photoURL||'';
+  if(photo){$('profilePreview').src=photo;$('profilePreview').style.display='block';$('profileInitial').style.display='none';}
+  else{$('profilePreview').style.display='none';$('profileInitial').style.display='grid';}
+  const avatarImg=$('settingsAvatarImg'),avatarInitial=$('settingsAvatarInitial');
+  if(avatarImg&&avatarInitial){if(photo){avatarImg.src=photo;avatarImg.style.display='block';avatarInitial.style.display='none';}else{avatarImg.removeAttribute('src');avatarImg.style.display='none';avatarInitial.textContent=(name.trim()[0]||u.email?.[0]||'N').toUpperCase();avatarInitial.style.display='grid';}}
+}
+function handleProfilePhoto(input){
+  const file=input.files&&input.files[0];if(!file)return;
+  if(!file.type.startsWith('image/')){alert('Please choose an image file.');input.value='';return;}
+  if(file.size>8*1024*1024){alert('Please choose an image smaller than 8 MB.');input.value='';return;}
+  const reader=new FileReader();
+  reader.onload=()=>{const img=new Image();img.onload=()=>{
+    const canvas=document.createElement('canvas');const scale=Math.min(1,256/Math.max(img.width,img.height));canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);
+    canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+    const data=canvas.toDataURL('image/jpeg',0.78);
+    try{localStorage.setItem(profilePhotoKey(),data);renderProfile();$('profileStatus').textContent='Photo saved on this device. Tap Save profile to save your name.';}
+    catch(e){alert('Could not save this photo. Please choose a smaller image or clear some device storage.');}
+  };img.onerror=()=>alert('Could not read this image. Please try another.');img.src=reader.result;};
+  reader.readAsDataURL(file);
+}
+async function saveProfile(){
+  const name=$('profileName').value.trim();if(!name)return alert('Please enter your name.');
+  const btn=document.querySelector('[onclick="saveProfile()"]');if(btn){btn.disabled=true;btn.textContent='Saving…';}
+  try{await auth.currentUser.updateProfile({displayName:name});renderProfile();$('profileStatus').textContent='Your name has been saved to your sign-in account. Your photo is saved on this device.';}
+  catch(e){$('profileStatus').textContent='Could not save your name: '+e.message;}
+  finally{if(btn){btn.disabled=false;btn.textContent='Save profile';}}
+}
+function submitFeedback(){
+  const type=$('feedbackType').value;const message=$('feedbackMessage').value.trim();
+  if(!message)return alert('Please describe your feedback first.');
+  const title=type+': '+message.slice(0,65).replace(/\s+/g,' ');
+  const body='Feedback type: '+type+'\n\n'+message+'\n\nApp: NGR TRADES PRO\nSigned-in account: '+(auth.currentUser?.email||'Not available');
+  const url='https://github.com/kumailabbas007/NGR-Trades-Pro/issues/new?title='+encodeURIComponent(title)+'&body='+encodeURIComponent(body);
+  window.open(url,'_blank','noopener');
+}
+function setTheme(t){document.documentElement.classList.toggle('light',t==='light');localStorage.setItem('ngrTheme',t);}
+function savePrefs(){
+  const maxRisk=Number($('maxRisk').value);
+  if(!(maxRisk>=0.1&&maxRisk<=5))return alert('Maximum risk must be between 0.1% and 5%.');
+  localStorage.setItem('ngrMaxRisk',maxRisk);
+  localStorage.setItem('ngrProLevel',$('levelSelect').value);
+  $('pRisk').value=String(maxRisk);
+  alert('Preferences saved on this device. Position sizing now enforces this maximum.');
+}
+function chooseLevel(v,btn){selectedLevel=v;document.querySelectorAll('#welcomeModal .row .pill').forEach(x=>x.classList.remove('selected'));btn.classList.add('selected')}
+function finishWelcome(skip){if(!$('riskAgree').checked)return alert('Please accept the risk disclaimer to continue.');localStorage.setItem('ngrWelcome','1');localStorage.setItem('ngrProLevel',selectedLevel);$('levelSelect').value=selectedLevel;$('welcomeModal').classList.remove('open')}
+function mountTVWidget(id,file,config){const host=$(id);if(!host||host.dataset.mounted)return;host.dataset.mounted='1';host.replaceChildren();const root=document.createElement('div');root.className='tradingview-widget-container';root.style.width='100%';const inner=document.createElement('div');inner.className='tradingview-widget-container__widget';inner.style.width='100%';root.appendChild(inner);const script=document.createElement('script');script.async=true;script.src='https://s3.tradingview.com/external-embedding/'+file;script.textContent=JSON.stringify(config);root.appendChild(script);host.appendChild(root);}
+function initLiveWidgets(){mountTVWidget('tvTechnical','embed-widget-technical-analysis.js',{interval:'1h',width:'100%',isTransparent:true,height:390,symbol:'OANDA:XAUUSD',showIntervalTabs:true,displayMode:'single',locale:'en',colorTheme:'dark'});mountTVWidget('tvEvents','embed-widget-events.js',{width:'100%',height:480,colorTheme:'dark',isTransparent:true,locale:'en',importanceFilter:'-1,0,1',countryFilter:'us'});mountTVWidget('tvNews','embed-widget-timeline.js',{feedMode:'market',market:'commodities',width:'100%',height:420,colorTheme:'dark',isTransparent:true,displayMode:'regular',locale:'en'});}
+function updateSessionClocks(){const sessions=[['Tokyo','Asia/Tokyo',0,9],['London','Europe/London',8,17],['NewYork','America/New_York',8,17]],now=new Date();sessions.forEach(([key,zone,start,end])=>{const parts=new Intl.DateTimeFormat('en-GB',{timeZone:zone,hour:'2-digit',minute:'2-digit',hourCycle:'h23',weekday:'short'}).formatToParts(now),hour=Number(parts.find(p=>p.type==='hour')?.value||0),minute=Number(parts.find(p=>p.type==='minute')?.value||0),day=parts.find(p=>p.type==='weekday')?.value||'',open=day!=='Sat'&&day!=='Sun'&&hour>=start&&hour<end;const st=$('session'+key),tm=$('time'+key);if(st)st.textContent=open?'OPEN':'CLOSED';if(tm)tm.textContent=String(hour).padStart(2,'0')+':'+String(minute).padStart(2,'0')+' local';});const local=$('sessionLocal');if(local)local.textContent='Pakistan time · '+new Intl.DateTimeFormat('en-PK',{timeZone:'Asia/Karachi',dateStyle:'medium',timeStyle:'short'}).format(now)+' · Approximate session windows.';}
+function updateAlertCondition(){const c=$('alertCond')?.value,pct=c==='percent_up'||c==='percent_down';$('alertPriceField')?.classList.toggle('hide',pct);$('alertPercentField')?.classList.toggle('hide',!pct);}
+function touchLearningStreak(){const uid=auth.currentUser?.uid||'local',key='ngrLearningStreak_'+uid,today=new Date().toISOString().slice(0,10);let d={last:'',count:0};try{d=JSON.parse(localStorage.getItem(key)||'{}')}catch(e){}if(d.last!==today){const y=new Date();y.setDate(y.getDate()-1);d.count=d.last===y.toISOString().slice(0,10)?(Number(d.count)||0)+1:1;d.last=today;localStorage.setItem(key,JSON.stringify(d));}return Number(d.count)||1;}
+function updateProProgress(){const done=JSON.parse(localStorage.getItem('ngrLessons')||'[]'),pct=Math.round(done.length/lessons.length*100),trades=readJournal(),streak=touchLearningStreak();if($('progressLessons'))$('progressLessons').textContent=pct+'%';if($('progressStreak'))$('progressStreak').textContent=streak+' days';if($('progressTrades'))$('progressTrades').textContent=trades.length;if($('progressBarPro'))$('progressBarPro').style.width=pct+'%';const items=[['🌱','First steps','Complete your first lesson',done.length>=1],['📚','Student','Complete 5 lessons',done.length>=5],['🎓','Graduate','Complete every beginner lesson',done.length>=lessons.length],['🔥','Consistency','Build a 3-day learning streak',streak>=3],['📝','Journal keeper','Record your first trade',trades.length>=1],['📊','Review pro','Record 10 trades',trades.length>=10],['🛡️','Risk first','Complete the pre-trade checklist',localStorage.getItem('ngrChecklistDone')==='1']];const grid=$('achievementGrid');if(grid)grid.replaceChildren(...items.map(([emoji,name,desc,ok])=>{const el=document.createElement('div');el.className='achievement'+(ok?'':' locked');const icon=document.createElement('span'),body=document.createElement('div'),b=document.createElement('b'),sm=document.createElement('small');icon.textContent=emoji;b.textContent=name;sm.textContent=desc;body.append(b,sm);el.append(icon,body);return el;}));}
+function addZyroMessage(message,who){const host=$('zyroConversation');if(!host)return;const el=document.createElement('div');el.className='zyro-message '+(who==='user'?'zyro-user':'zyro-bot');el.textContent=message;host.appendChild(el);host.scrollTop=host.scrollHeight;}
+async function askZyroCoach(){const box=$('zyroQuestion'),btn=$('zyroSend'),status=$('zyroStatus'),message=box.value.trim();if(!message)return;if(message.length>2000)return alert('Keep your question under 2,000 characters.');addZyroMessage(message,'user');box.value='';btn.disabled=true;btn.textContent='Thinking…';status.textContent='Connecting securely to ZYRO…';try{const r=await fetch(ALERT_API+'/ai-coach',{method:'POST',headers:await authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({message})}),d=await r.json();if(!r.ok)throw Error(d.detail||d.error||'HTTP '+r.status);addZyroMessage(d.answer||'No response returned.','bot');status.textContent='Educational response · Verify important information independently.';}catch(e){addZyroMessage('I could not connect right now. '+e.message,'bot');status.textContent=e.message.includes('not configured')?'AI provider setup is still required on the secure server.':'Connection unavailable. Please try again later.';}finally{btn.disabled=false;btn.textContent='Ask ZYRO';}}
+function init(){setTheme(localStorage.getItem('ngrTheme')||'dark');$('themeSelect').value=localStorage.getItem('ngrTheme')||'dark';$('maxRisk').value=localStorage.getItem('ngrMaxRisk')||'1';$('pRisk').value=localStorage.getItem('ngrMaxRisk')||'1';$('levelSelect').value=localStorage.getItem('ngrProLevel')||'Beginner';$('favBtn').textContent=localStorage.getItem('ngrFav')||'☆';renderCourses();renderRules();renderGlossary();renderQuiz();renderChecklist();renderEventChecklist();renderJournal();}
+init();
+auth.onAuthStateChanged(async user=>{
+  if(user&&user.emailVerified){
+    document.body.classList.add("authenticated");$("authGate").classList.add("hide");$("verifyPanel").classList.add("hide");
+    if($("accountEmail"))$("accountEmail").textContent=user.email||"Google account";
+    if($("profileName"))renderProfile();
+    try{
+      const headers=await authHeaders({"Content-Type":"application/json"});
+      const claimed=await fetch(ALERT_API+"/claim-device",{method:"POST",headers,body:JSON.stringify({deviceToken})});
+      if(!claimed.ok)throw Error("Alert migration HTTP "+claimed.status);
+      const result=await claimed.json();if(result.migrated>0)console.info("Migrated existing alerts:",result.migrated);
+    }catch(e){console.warn("Existing alert migration will retry:",e.message);}
+    syncAlerts();
+    if(!localStorage.getItem("ngrWelcome"))$("welcomeModal").classList.add("open");
+  }else{
+    document.body.classList.remove("authenticated");$("authGate").classList.remove("hide");
+    if($("profileName")){ $("profileName").value=""; $("profileDisplayName").textContent="Your name"; }
+    if($("accountEmail"))$("accountEmail").textContent="Not signed in";
+    if(user&&!user.emailVerified){showVerification();showAuthMessage("Please verify "+(user.email||"your email")+" to continue.");}
+    else $("verifyPanel").classList.add("hide");
+  }
+});
+auth.getRedirectResult().catch(e=>showAuthMessage(e.message||"Google sign-in failed."));
+window.addEventListener('focus',syncAlerts);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncAlerts()});
+if('serviceWorker'in navigator&&location.protocol.startsWith('http'))addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+</script></body></html>+Math.abs(avgLoss).toFixed(2);if($('jProfitFactor'))$('jProfitFactor').textContent=pf==='∞'||pf==='—'?pf:pf.toFixed(2);if($('jExpectancy'))$('jExpectancy').textContent=(net>=0?'+':'')+'}const rows=a.slice(0,30).map(x=>{const row=document.createElement('div');row.className='item';const left=document.createElement('div');const b=document.createElement('b');b.textContent=x.symbol+' '+x.side+' · '+(x.pnl>=0?'+':'')+'$'+Number(x.pnl).toFixed(2);left.appendChild(b);const d=document.createElement('div');d.className='small muted';d.textContent=new Date(x.date).toLocaleString()+' · '+x.entry+' → '+x.exit+' · '+x.lots+' lots';left.appendChild(d);const del=document.createElement('button');del.className='btn secondary';del.textContent='Delete';del.onclick=()=>{localStorage.setItem(journalKey(),JSON.stringify(readJournal().filter(t=>t.id!==x.id)));renderJournal();};row.append(left,del);return row;});$('journalList').replaceChildren(...rows);}
+function exportJournal(){const a=readJournal();if(!a.length)return alert('No entries to export.');const cols=['date','symbol','side','entry','exit','lots','contract','pnl','notes'];const csv=[cols.join(','),...a.map(x=>cols.map(k=>'"'+String(x[k]??'').replace(/"/g,'""')+'"').join(','))].join(String.fromCharCode(10));const url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));const link=document.createElement('a');link.href=url;link.download='ngr-trading-journal.csv';link.click();URL.revokeObjectURL(url);}
+function calcSentiment(){const score=['sDollar','sYields','sRisk','sTech'].reduce((n,id)=>n+Number($(id).value),0);$('sentimentResult').textContent=(score>=2?'Bullish observations':score<=-2?'Bearish observations':'Mixed / neutral observations')+' · '+(score>0?'+':'')+score;$('sentimentExplain').textContent='Based only on your manual inputs. Verify source data independently; this is not a trade signal.';}
+function calcProRisk(){const b=+$('rpBalance').value,r=+$('rpRisk').value,e=+$('rpEntry').value,s=+$('rpStop').value,t=+$('rpTarget').value,c=+$('rpContract').value,max=Number(localStorage.getItem('ngrMaxRisk')||1),dist=Math.abs(e-s),reward=Math.abs(t-e),valid=b>0&&r>0&&e>0&&s>0&&t>0&&c>0&&dist>0&&((s<e&&t>e)||(s>e&&t<e));if(!valid){$('rpLots').textContent='Check levels';$('rpDetails').textContent='BUY requires stop below entry and target above; SELL requires the reverse.';return;}if(r>max){$('rpLots').textContent='Above saved max risk ('+max+'%)';$('rpDetails').textContent='Lower risk or adjust your maximum-risk preference in Settings.';return;}const cash=b*r/100,lots=cash/(dist*c),potential=reward*lots*c;$('rpLots').textContent=lots.toFixed(4)+' lots';$('rpDetails').textContent='Planned risk ≈ $'+cash.toFixed(2)+' · Potential gross reward ≈ $'+potential.toFixed(2)+' · R:R '+(reward/dist).toFixed(2)+':1. Excludes trading costs and broker volume constraints.';}
+function runGoldAnalyst(){const score=['aStructure','aLocation','aConfirm'].reduce((n,id)=>n+Number($(id).value),0),news=Number($('aNews').value);$('analystResult').textContent=(score>=2?'Bullish factors align':score<=-2?'Bearish factors align':'Setup is mixed / unclear')+' · score '+(score>0?'+':'')+score;$('analystExplain').textContent='Timeframe: '+$('aTime').value+'. '+(news===-1?'News risk flagged; consider waiting.':news===0?'News not verified; check the live calendar.':'You marked news checked; independently confirm it.')+' This is a rules-based summary, not AI, a forecast or a buy/sell signal.';}
+function renderEventChecklist(){$('eventChecklist').innerHTML=['FOMC / Fed decision','US CPI and PCE inflation','US employment / NFP','Federal Reserve speeches','US dollar and Treasury yield moves'].map(x=>'<label class="check"><input type="checkbox"><span>'+x+'</span></label>').join('');}
+function profilePhotoKey(){return 'ngrProfilePhoto_'+(auth.currentUser?.uid||'local');}
+function renderProfile(){
+  const u=auth.currentUser;if(!u)return;
+  const name=u.displayName||'';
+  $('profileName').value=name;
+  $('profileDisplayName').textContent=name||'Your name';
+  $('profileInitial').textContent=(name.trim()[0]||u.email?.[0]||'N').toUpperCase();
+  const photo=localStorage.getItem(profilePhotoKey())||u.photoURL||'';
+  if(photo){$('profilePreview').src=photo;$('profilePreview').style.display='block';$('profileInitial').style.display='none';}
+  else{$('profilePreview').style.display='none';$('profileInitial').style.display='grid';}
+  const avatarImg=$('settingsAvatarImg'),avatarInitial=$('settingsAvatarInitial');
+  if(avatarImg&&avatarInitial){if(photo){avatarImg.src=photo;avatarImg.style.display='block';avatarInitial.style.display='none';}else{avatarImg.removeAttribute('src');avatarImg.style.display='none';avatarInitial.textContent=(name.trim()[0]||u.email?.[0]||'N').toUpperCase();avatarInitial.style.display='grid';}}
+}
+function handleProfilePhoto(input){
+  const file=input.files&&input.files[0];if(!file)return;
+  if(!file.type.startsWith('image/')){alert('Please choose an image file.');input.value='';return;}
+  if(file.size>8*1024*1024){alert('Please choose an image smaller than 8 MB.');input.value='';return;}
+  const reader=new FileReader();
+  reader.onload=()=>{const img=new Image();img.onload=()=>{
+    const canvas=document.createElement('canvas');const scale=Math.min(1,256/Math.max(img.width,img.height));canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);
+    canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+    const data=canvas.toDataURL('image/jpeg',0.78);
+    try{localStorage.setItem(profilePhotoKey(),data);renderProfile();$('profileStatus').textContent='Photo saved on this device. Tap Save profile to save your name.';}
+    catch(e){alert('Could not save this photo. Please choose a smaller image or clear some device storage.');}
+  };img.onerror=()=>alert('Could not read this image. Please try another.');img.src=reader.result;};
+  reader.readAsDataURL(file);
+}
+async function saveProfile(){
+  const name=$('profileName').value.trim();if(!name)return alert('Please enter your name.');
+  const btn=document.querySelector('[onclick="saveProfile()"]');if(btn){btn.disabled=true;btn.textContent='Saving…';}
+  try{await auth.currentUser.updateProfile({displayName:name});renderProfile();$('profileStatus').textContent='Your name has been saved to your sign-in account. Your photo is saved on this device.';}
+  catch(e){$('profileStatus').textContent='Could not save your name: '+e.message;}
+  finally{if(btn){btn.disabled=false;btn.textContent='Save profile';}}
+}
+function submitFeedback(){
+  const type=$('feedbackType').value;const message=$('feedbackMessage').value.trim();
+  if(!message)return alert('Please describe your feedback first.');
+  const title=type+': '+message.slice(0,65).replace(/\s+/g,' ');
+  const body='Feedback type: '+type+'\n\n'+message+'\n\nApp: NGR TRADES PRO\nSigned-in account: '+(auth.currentUser?.email||'Not available');
+  const url='https://github.com/kumailabbas007/NGR-Trades-Pro/issues/new?title='+encodeURIComponent(title)+'&body='+encodeURIComponent(body);
+  window.open(url,'_blank','noopener');
+}
+function setTheme(t){document.documentElement.classList.toggle('light',t==='light');localStorage.setItem('ngrTheme',t);}
+function savePrefs(){
+  const maxRisk=Number($('maxRisk').value);
+  if(!(maxRisk>=0.1&&maxRisk<=5))return alert('Maximum risk must be between 0.1% and 5%.');
+  localStorage.setItem('ngrMaxRisk',maxRisk);
+  localStorage.setItem('ngrProLevel',$('levelSelect').value);
+  $('pRisk').value=String(maxRisk);
+  alert('Preferences saved on this device. Position sizing now enforces this maximum.');
+}
+function chooseLevel(v,btn){selectedLevel=v;document.querySelectorAll('#welcomeModal .row .pill').forEach(x=>x.classList.remove('selected'));btn.classList.add('selected')}
+function finishWelcome(skip){if(!$('riskAgree').checked)return alert('Please accept the risk disclaimer to continue.');localStorage.setItem('ngrWelcome','1');localStorage.setItem('ngrProLevel',selectedLevel);$('levelSelect').value=selectedLevel;$('welcomeModal').classList.remove('open')}
+function mountTVWidget(id,file,config){const host=$(id);if(!host||host.dataset.mounted)return;host.dataset.mounted='1';host.replaceChildren();const root=document.createElement('div');root.className='tradingview-widget-container';root.style.width='100%';const inner=document.createElement('div');inner.className='tradingview-widget-container__widget';inner.style.width='100%';root.appendChild(inner);const script=document.createElement('script');script.async=true;script.src='https://s3.tradingview.com/external-embedding/'+file;script.textContent=JSON.stringify(config);root.appendChild(script);host.appendChild(root);}
+function initLiveWidgets(){mountTVWidget('tvTechnical','embed-widget-technical-analysis.js',{interval:'1h',width:'100%',isTransparent:true,height:390,symbol:'OANDA:XAUUSD',showIntervalTabs:true,displayMode:'single',locale:'en',colorTheme:'dark'});mountTVWidget('tvEvents','embed-widget-events.js',{width:'100%',height:480,colorTheme:'dark',isTransparent:true,locale:'en',importanceFilter:'-1,0,1',countryFilter:'us'});mountTVWidget('tvNews','embed-widget-timeline.js',{feedMode:'market',market:'commodities',width:'100%',height:420,colorTheme:'dark',isTransparent:true,displayMode:'regular',locale:'en'});}
+function updateSessionClocks(){const sessions=[['Tokyo','Asia/Tokyo',0,9],['London','Europe/London',8,17],['NewYork','America/New_York',8,17]],now=new Date();sessions.forEach(([key,zone,start,end])=>{const parts=new Intl.DateTimeFormat('en-GB',{timeZone:zone,hour:'2-digit',minute:'2-digit',hourCycle:'h23',weekday:'short'}).formatToParts(now),hour=Number(parts.find(p=>p.type==='hour')?.value||0),minute=Number(parts.find(p=>p.type==='minute')?.value||0),day=parts.find(p=>p.type==='weekday')?.value||'',open=day!=='Sat'&&day!=='Sun'&&hour>=start&&hour<end;const st=$('session'+key),tm=$('time'+key);if(st)st.textContent=open?'OPEN':'CLOSED';if(tm)tm.textContent=String(hour).padStart(2,'0')+':'+String(minute).padStart(2,'0')+' local';});const local=$('sessionLocal');if(local)local.textContent='Pakistan time · '+new Intl.DateTimeFormat('en-PK',{timeZone:'Asia/Karachi',dateStyle:'medium',timeStyle:'short'}).format(now)+' · Approximate session windows.';}
+function updateAlertCondition(){const c=$('alertCond')?.value,pct=c==='percent_up'||c==='percent_down';$('alertPriceField')?.classList.toggle('hide',pct);$('alertPercentField')?.classList.toggle('hide',!pct);}
+function touchLearningStreak(){const uid=auth.currentUser?.uid||'local',key='ngrLearningStreak_'+uid,today=new Date().toISOString().slice(0,10);let d={last:'',count:0};try{d=JSON.parse(localStorage.getItem(key)||'{}')}catch(e){}if(d.last!==today){const y=new Date();y.setDate(y.getDate()-1);d.count=d.last===y.toISOString().slice(0,10)?(Number(d.count)||0)+1:1;d.last=today;localStorage.setItem(key,JSON.stringify(d));}return Number(d.count)||1;}
+function updateProProgress(){const done=JSON.parse(localStorage.getItem('ngrLessons')||'[]'),pct=Math.round(done.length/lessons.length*100),trades=readJournal(),streak=touchLearningStreak();if($('progressLessons'))$('progressLessons').textContent=pct+'%';if($('progressStreak'))$('progressStreak').textContent=streak+' days';if($('progressTrades'))$('progressTrades').textContent=trades.length;if($('progressBarPro'))$('progressBarPro').style.width=pct+'%';const items=[['🌱','First steps','Complete your first lesson',done.length>=1],['📚','Student','Complete 5 lessons',done.length>=5],['🎓','Graduate','Complete every beginner lesson',done.length>=lessons.length],['🔥','Consistency','Build a 3-day learning streak',streak>=3],['📝','Journal keeper','Record your first trade',trades.length>=1],['📊','Review pro','Record 10 trades',trades.length>=10],['🛡️','Risk first','Complete the pre-trade checklist',localStorage.getItem('ngrChecklistDone')==='1']];const grid=$('achievementGrid');if(grid)grid.replaceChildren(...items.map(([emoji,name,desc,ok])=>{const el=document.createElement('div');el.className='achievement'+(ok?'':' locked');const icon=document.createElement('span'),body=document.createElement('div'),b=document.createElement('b'),sm=document.createElement('small');icon.textContent=emoji;b.textContent=name;sm.textContent=desc;body.append(b,sm);el.append(icon,body);return el;}));}
+function addZyroMessage(message,who){const host=$('zyroConversation');if(!host)return;const el=document.createElement('div');el.className='zyro-message '+(who==='user'?'zyro-user':'zyro-bot');el.textContent=message;host.appendChild(el);host.scrollTop=host.scrollHeight;}
+async function askZyroCoach(){const box=$('zyroQuestion'),btn=$('zyroSend'),status=$('zyroStatus'),message=box.value.trim();if(!message)return;if(message.length>2000)return alert('Keep your question under 2,000 characters.');addZyroMessage(message,'user');box.value='';btn.disabled=true;btn.textContent='Thinking…';status.textContent='Connecting securely to ZYRO…';try{const r=await fetch(ALERT_API+'/ai-coach',{method:'POST',headers:await authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({message})}),d=await r.json();if(!r.ok)throw Error(d.detail||d.error||'HTTP '+r.status);addZyroMessage(d.answer||'No response returned.','bot');status.textContent='Educational response · Verify important information independently.';}catch(e){addZyroMessage('I could not connect right now. '+e.message,'bot');status.textContent=e.message.includes('not configured')?'AI provider setup is still required on the secure server.':'Connection unavailable. Please try again later.';}finally{btn.disabled=false;btn.textContent='Ask ZYRO';}}
+function init(){setTheme(localStorage.getItem('ngrTheme')||'dark');$('themeSelect').value=localStorage.getItem('ngrTheme')||'dark';$('maxRisk').value=localStorage.getItem('ngrMaxRisk')||'1';$('pRisk').value=localStorage.getItem('ngrMaxRisk')||'1';$('levelSelect').value=localStorage.getItem('ngrProLevel')||'Beginner';$('favBtn').textContent=localStorage.getItem('ngrFav')||'☆';renderCourses();renderRules();renderGlossary();renderQuiz();renderChecklist();renderEventChecklist();renderJournal();}
+init();
+auth.onAuthStateChanged(async user=>{
+  if(user&&user.emailVerified){
+    document.body.classList.add("authenticated");$("authGate").classList.add("hide");$("verifyPanel").classList.add("hide");
+    if($("accountEmail"))$("accountEmail").textContent=user.email||"Google account";
+    if($("profileName"))renderProfile();
+    try{
+      const headers=await authHeaders({"Content-Type":"application/json"});
+      const claimed=await fetch(ALERT_API+"/claim-device",{method:"POST",headers,body:JSON.stringify({deviceToken})});
+      if(!claimed.ok)throw Error("Alert migration HTTP "+claimed.status);
+      const result=await claimed.json();if(result.migrated>0)console.info("Migrated existing alerts:",result.migrated);
+    }catch(e){console.warn("Existing alert migration will retry:",e.message);}
+    syncAlerts();
+    if(!localStorage.getItem("ngrWelcome"))$("welcomeModal").classList.add("open");
+  }else{
+    document.body.classList.remove("authenticated");$("authGate").classList.remove("hide");
+    if($("profileName")){ $("profileName").value=""; $("profileDisplayName").textContent="Your name"; }
+    if($("accountEmail"))$("accountEmail").textContent="Not signed in";
+    if(user&&!user.emailVerified){showVerification();showAuthMessage("Please verify "+(user.email||"your email")+" to continue.");}
+    else $("verifyPanel").classList.add("hide");
+  }
+});
+auth.getRedirectResult().catch(e=>showAuthMessage(e.message||"Google sign-in failed."));
+window.addEventListener('focus',syncAlerts);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncAlerts()});
+if('serviceWorker'in navigator&&location.protocol.startsWith('http'))addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+</script></body></html>+(a.length?net/a.length:0).toFixed(2);if($('jMaxDD'))$('jMaxDD').textContent='}const rows=a.slice(0,30).map(x=>{const row=document.createElement('div');row.className='item';const left=document.createElement('div');const b=document.createElement('b');b.textContent=x.symbol+' '+x.side+' · '+(x.pnl>=0?'+':'')+'$'+Number(x.pnl).toFixed(2);left.appendChild(b);const d=document.createElement('div');d.className='small muted';d.textContent=new Date(x.date).toLocaleString()+' · '+x.entry+' → '+x.exit+' · '+x.lots+' lots';left.appendChild(d);const del=document.createElement('button');del.className='btn secondary';del.textContent='Delete';del.onclick=()=>{localStorage.setItem(journalKey(),JSON.stringify(readJournal().filter(t=>t.id!==x.id)));renderJournal();};row.append(left,del);return row;});$('journalList').replaceChildren(...rows);}
+function exportJournal(){const a=readJournal();if(!a.length)return alert('No entries to export.');const cols=['date','symbol','side','entry','exit','lots','contract','pnl','notes'];const csv=[cols.join(','),...a.map(x=>cols.map(k=>'"'+String(x[k]??'').replace(/"/g,'""')+'"').join(','))].join(String.fromCharCode(10));const url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));const link=document.createElement('a');link.href=url;link.download='ngr-trading-journal.csv';link.click();URL.revokeObjectURL(url);}
+function calcSentiment(){const score=['sDollar','sYields','sRisk','sTech'].reduce((n,id)=>n+Number($(id).value),0);$('sentimentResult').textContent=(score>=2?'Bullish observations':score<=-2?'Bearish observations':'Mixed / neutral observations')+' · '+(score>0?'+':'')+score;$('sentimentExplain').textContent='Based only on your manual inputs. Verify source data independently; this is not a trade signal.';}
+function calcProRisk(){const b=+$('rpBalance').value,r=+$('rpRisk').value,e=+$('rpEntry').value,s=+$('rpStop').value,t=+$('rpTarget').value,c=+$('rpContract').value,max=Number(localStorage.getItem('ngrMaxRisk')||1),dist=Math.abs(e-s),reward=Math.abs(t-e),valid=b>0&&r>0&&e>0&&s>0&&t>0&&c>0&&dist>0&&((s<e&&t>e)||(s>e&&t<e));if(!valid){$('rpLots').textContent='Check levels';$('rpDetails').textContent='BUY requires stop below entry and target above; SELL requires the reverse.';return;}if(r>max){$('rpLots').textContent='Above saved max risk ('+max+'%)';$('rpDetails').textContent='Lower risk or adjust your maximum-risk preference in Settings.';return;}const cash=b*r/100,lots=cash/(dist*c),potential=reward*lots*c;$('rpLots').textContent=lots.toFixed(4)+' lots';$('rpDetails').textContent='Planned risk ≈ $'+cash.toFixed(2)+' · Potential gross reward ≈ $'+potential.toFixed(2)+' · R:R '+(reward/dist).toFixed(2)+':1. Excludes trading costs and broker volume constraints.';}
+function runGoldAnalyst(){const score=['aStructure','aLocation','aConfirm'].reduce((n,id)=>n+Number($(id).value),0),news=Number($('aNews').value);$('analystResult').textContent=(score>=2?'Bullish factors align':score<=-2?'Bearish factors align':'Setup is mixed / unclear')+' · score '+(score>0?'+':'')+score;$('analystExplain').textContent='Timeframe: '+$('aTime').value+'. '+(news===-1?'News risk flagged; consider waiting.':news===0?'News not verified; check the live calendar.':'You marked news checked; independently confirm it.')+' This is a rules-based summary, not AI, a forecast or a buy/sell signal.';}
+function renderEventChecklist(){$('eventChecklist').innerHTML=['FOMC / Fed decision','US CPI and PCE inflation','US employment / NFP','Federal Reserve speeches','US dollar and Treasury yield moves'].map(x=>'<label class="check"><input type="checkbox"><span>'+x+'</span></label>').join('');}
+function profilePhotoKey(){return 'ngrProfilePhoto_'+(auth.currentUser?.uid||'local');}
+function renderProfile(){
+  const u=auth.currentUser;if(!u)return;
+  const name=u.displayName||'';
+  $('profileName').value=name;
+  $('profileDisplayName').textContent=name||'Your name';
+  $('profileInitial').textContent=(name.trim()[0]||u.email?.[0]||'N').toUpperCase();
+  const photo=localStorage.getItem(profilePhotoKey())||u.photoURL||'';
+  if(photo){$('profilePreview').src=photo;$('profilePreview').style.display='block';$('profileInitial').style.display='none';}
+  else{$('profilePreview').style.display='none';$('profileInitial').style.display='grid';}
+  const avatarImg=$('settingsAvatarImg'),avatarInitial=$('settingsAvatarInitial');
+  if(avatarImg&&avatarInitial){if(photo){avatarImg.src=photo;avatarImg.style.display='block';avatarInitial.style.display='none';}else{avatarImg.removeAttribute('src');avatarImg.style.display='none';avatarInitial.textContent=(name.trim()[0]||u.email?.[0]||'N').toUpperCase();avatarInitial.style.display='grid';}}
+}
+function handleProfilePhoto(input){
+  const file=input.files&&input.files[0];if(!file)return;
+  if(!file.type.startsWith('image/')){alert('Please choose an image file.');input.value='';return;}
+  if(file.size>8*1024*1024){alert('Please choose an image smaller than 8 MB.');input.value='';return;}
+  const reader=new FileReader();
+  reader.onload=()=>{const img=new Image();img.onload=()=>{
+    const canvas=document.createElement('canvas');const scale=Math.min(1,256/Math.max(img.width,img.height));canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);
+    canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+    const data=canvas.toDataURL('image/jpeg',0.78);
+    try{localStorage.setItem(profilePhotoKey(),data);renderProfile();$('profileStatus').textContent='Photo saved on this device. Tap Save profile to save your name.';}
+    catch(e){alert('Could not save this photo. Please choose a smaller image or clear some device storage.');}
+  };img.onerror=()=>alert('Could not read this image. Please try another.');img.src=reader.result;};
+  reader.readAsDataURL(file);
+}
+async function saveProfile(){
+  const name=$('profileName').value.trim();if(!name)return alert('Please enter your name.');
+  const btn=document.querySelector('[onclick="saveProfile()"]');if(btn){btn.disabled=true;btn.textContent='Saving…';}
+  try{await auth.currentUser.updateProfile({displayName:name});renderProfile();$('profileStatus').textContent='Your name has been saved to your sign-in account. Your photo is saved on this device.';}
+  catch(e){$('profileStatus').textContent='Could not save your name: '+e.message;}
+  finally{if(btn){btn.disabled=false;btn.textContent='Save profile';}}
+}
+function submitFeedback(){
+  const type=$('feedbackType').value;const message=$('feedbackMessage').value.trim();
+  if(!message)return alert('Please describe your feedback first.');
+  const title=type+': '+message.slice(0,65).replace(/\s+/g,' ');
+  const body='Feedback type: '+type+'\n\n'+message+'\n\nApp: NGR TRADES PRO\nSigned-in account: '+(auth.currentUser?.email||'Not available');
+  const url='https://github.com/kumailabbas007/NGR-Trades-Pro/issues/new?title='+encodeURIComponent(title)+'&body='+encodeURIComponent(body);
+  window.open(url,'_blank','noopener');
+}
+function setTheme(t){document.documentElement.classList.toggle('light',t==='light');localStorage.setItem('ngrTheme',t);}
+function savePrefs(){
+  const maxRisk=Number($('maxRisk').value);
+  if(!(maxRisk>=0.1&&maxRisk<=5))return alert('Maximum risk must be between 0.1% and 5%.');
+  localStorage.setItem('ngrMaxRisk',maxRisk);
+  localStorage.setItem('ngrProLevel',$('levelSelect').value);
+  $('pRisk').value=String(maxRisk);
+  alert('Preferences saved on this device. Position sizing now enforces this maximum.');
+}
+function chooseLevel(v,btn){selectedLevel=v;document.querySelectorAll('#welcomeModal .row .pill').forEach(x=>x.classList.remove('selected'));btn.classList.add('selected')}
+function finishWelcome(skip){if(!$('riskAgree').checked)return alert('Please accept the risk disclaimer to continue.');localStorage.setItem('ngrWelcome','1');localStorage.setItem('ngrProLevel',selectedLevel);$('levelSelect').value=selectedLevel;$('welcomeModal').classList.remove('open')}
+function mountTVWidget(id,file,config){const host=$(id);if(!host||host.dataset.mounted)return;host.dataset.mounted='1';host.replaceChildren();const root=document.createElement('div');root.className='tradingview-widget-container';root.style.width='100%';const inner=document.createElement('div');inner.className='tradingview-widget-container__widget';inner.style.width='100%';root.appendChild(inner);const script=document.createElement('script');script.async=true;script.src='https://s3.tradingview.com/external-embedding/'+file;script.textContent=JSON.stringify(config);root.appendChild(script);host.appendChild(root);}
+function initLiveWidgets(){mountTVWidget('tvTechnical','embed-widget-technical-analysis.js',{interval:'1h',width:'100%',isTransparent:true,height:390,symbol:'OANDA:XAUUSD',showIntervalTabs:true,displayMode:'single',locale:'en',colorTheme:'dark'});mountTVWidget('tvEvents','embed-widget-events.js',{width:'100%',height:480,colorTheme:'dark',isTransparent:true,locale:'en',importanceFilter:'-1,0,1',countryFilter:'us'});mountTVWidget('tvNews','embed-widget-timeline.js',{feedMode:'market',market:'commodities',width:'100%',height:420,colorTheme:'dark',isTransparent:true,displayMode:'regular',locale:'en'});}
+function updateSessionClocks(){const sessions=[['Tokyo','Asia/Tokyo',0,9],['London','Europe/London',8,17],['NewYork','America/New_York',8,17]],now=new Date();sessions.forEach(([key,zone,start,end])=>{const parts=new Intl.DateTimeFormat('en-GB',{timeZone:zone,hour:'2-digit',minute:'2-digit',hourCycle:'h23',weekday:'short'}).formatToParts(now),hour=Number(parts.find(p=>p.type==='hour')?.value||0),minute=Number(parts.find(p=>p.type==='minute')?.value||0),day=parts.find(p=>p.type==='weekday')?.value||'',open=day!=='Sat'&&day!=='Sun'&&hour>=start&&hour<end;const st=$('session'+key),tm=$('time'+key);if(st)st.textContent=open?'OPEN':'CLOSED';if(tm)tm.textContent=String(hour).padStart(2,'0')+':'+String(minute).padStart(2,'0')+' local';});const local=$('sessionLocal');if(local)local.textContent='Pakistan time · '+new Intl.DateTimeFormat('en-PK',{timeZone:'Asia/Karachi',dateStyle:'medium',timeStyle:'short'}).format(now)+' · Approximate session windows.';}
+function updateAlertCondition(){const c=$('alertCond')?.value,pct=c==='percent_up'||c==='percent_down';$('alertPriceField')?.classList.toggle('hide',pct);$('alertPercentField')?.classList.toggle('hide',!pct);}
+function touchLearningStreak(){const uid=auth.currentUser?.uid||'local',key='ngrLearningStreak_'+uid,today=new Date().toISOString().slice(0,10);let d={last:'',count:0};try{d=JSON.parse(localStorage.getItem(key)||'{}')}catch(e){}if(d.last!==today){const y=new Date();y.setDate(y.getDate()-1);d.count=d.last===y.toISOString().slice(0,10)?(Number(d.count)||0)+1:1;d.last=today;localStorage.setItem(key,JSON.stringify(d));}return Number(d.count)||1;}
+function updateProProgress(){const done=JSON.parse(localStorage.getItem('ngrLessons')||'[]'),pct=Math.round(done.length/lessons.length*100),trades=readJournal(),streak=touchLearningStreak();if($('progressLessons'))$('progressLessons').textContent=pct+'%';if($('progressStreak'))$('progressStreak').textContent=streak+' days';if($('progressTrades'))$('progressTrades').textContent=trades.length;if($('progressBarPro'))$('progressBarPro').style.width=pct+'%';const items=[['🌱','First steps','Complete your first lesson',done.length>=1],['📚','Student','Complete 5 lessons',done.length>=5],['🎓','Graduate','Complete every beginner lesson',done.length>=lessons.length],['🔥','Consistency','Build a 3-day learning streak',streak>=3],['📝','Journal keeper','Record your first trade',trades.length>=1],['📊','Review pro','Record 10 trades',trades.length>=10],['🛡️','Risk first','Complete the pre-trade checklist',localStorage.getItem('ngrChecklistDone')==='1']];const grid=$('achievementGrid');if(grid)grid.replaceChildren(...items.map(([emoji,name,desc,ok])=>{const el=document.createElement('div');el.className='achievement'+(ok?'':' locked');const icon=document.createElement('span'),body=document.createElement('div'),b=document.createElement('b'),sm=document.createElement('small');icon.textContent=emoji;b.textContent=name;sm.textContent=desc;body.append(b,sm);el.append(icon,body);return el;}));}
+function addZyroMessage(message,who){const host=$('zyroConversation');if(!host)return;const el=document.createElement('div');el.className='zyro-message '+(who==='user'?'zyro-user':'zyro-bot');el.textContent=message;host.appendChild(el);host.scrollTop=host.scrollHeight;}
+async function askZyroCoach(){const box=$('zyroQuestion'),btn=$('zyroSend'),status=$('zyroStatus'),message=box.value.trim();if(!message)return;if(message.length>2000)return alert('Keep your question under 2,000 characters.');addZyroMessage(message,'user');box.value='';btn.disabled=true;btn.textContent='Thinking…';status.textContent='Connecting securely to ZYRO…';try{const r=await fetch(ALERT_API+'/ai-coach',{method:'POST',headers:await authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({message})}),d=await r.json();if(!r.ok)throw Error(d.detail||d.error||'HTTP '+r.status);addZyroMessage(d.answer||'No response returned.','bot');status.textContent='Educational response · Verify important information independently.';}catch(e){addZyroMessage('I could not connect right now. '+e.message,'bot');status.textContent=e.message.includes('not configured')?'AI provider setup is still required on the secure server.':'Connection unavailable. Please try again later.';}finally{btn.disabled=false;btn.textContent='Ask ZYRO';}}
+function init(){setTheme(localStorage.getItem('ngrTheme')||'dark');$('themeSelect').value=localStorage.getItem('ngrTheme')||'dark';$('maxRisk').value=localStorage.getItem('ngrMaxRisk')||'1';$('pRisk').value=localStorage.getItem('ngrMaxRisk')||'1';$('levelSelect').value=localStorage.getItem('ngrProLevel')||'Beginner';$('favBtn').textContent=localStorage.getItem('ngrFav')||'☆';renderCourses();renderRules();renderGlossary();renderQuiz();renderChecklist();renderEventChecklist();renderJournal();}
+init();
+auth.onAuthStateChanged(async user=>{
+  if(user&&user.emailVerified){
+    document.body.classList.add("authenticated");$("authGate").classList.add("hide");$("verifyPanel").classList.add("hide");
+    if($("accountEmail"))$("accountEmail").textContent=user.email||"Google account";
+    if($("profileName"))renderProfile();
+    try{
+      const headers=await authHeaders({"Content-Type":"application/json"});
+      const claimed=await fetch(ALERT_API+"/claim-device",{method:"POST",headers,body:JSON.stringify({deviceToken})});
+      if(!claimed.ok)throw Error("Alert migration HTTP "+claimed.status);
+      const result=await claimed.json();if(result.migrated>0)console.info("Migrated existing alerts:",result.migrated);
+    }catch(e){console.warn("Existing alert migration will retry:",e.message);}
+    syncAlerts();
+    if(!localStorage.getItem("ngrWelcome"))$("welcomeModal").classList.add("open");
+  }else{
+    document.body.classList.remove("authenticated");$("authGate").classList.remove("hide");
+    if($("profileName")){ $("profileName").value=""; $("profileDisplayName").textContent="Your name"; }
+    if($("accountEmail"))$("accountEmail").textContent="Not signed in";
+    if(user&&!user.emailVerified){showVerification();showAuthMessage("Please verify "+(user.email||"your email")+" to continue.");}
+    else $("verifyPanel").classList.add("hide");
+  }
+});
+auth.getRedirectResult().catch(e=>showAuthMessage(e.message||"Google sign-in failed."));
+window.addEventListener('focus',syncAlerts);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncAlerts()});
+if('serviceWorker'in navigator&&location.protocol.startsWith('http'))addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+</script></body></html>+maxDD.toFixed(2);const chart=$('jEquity');if(chart){const recent=a.slice(0,18).reverse(),max=Math.max(1,...recent.map(t=>Math.abs(Number(t.pnl)||0)));chart.replaceChildren(...recent.map(t=>{const el=document.createElement('div');el.className='journal-bar '+(t.pnl>0?'green':t.pnl<0?'red':'zero');el.style.height=Math.max(4,Math.abs(Number(t.pnl)||0)/max*68)+'px';el.title=(t.pnl>=0?'+':'')+'}const rows=a.slice(0,30).map(x=>{const row=document.createElement('div');row.className='item';const left=document.createElement('div');const b=document.createElement('b');b.textContent=x.symbol+' '+x.side+' · '+(x.pnl>=0?'+':'')+'$'+Number(x.pnl).toFixed(2);left.appendChild(b);const d=document.createElement('div');d.className='small muted';d.textContent=new Date(x.date).toLocaleString()+' · '+x.entry+' → '+x.exit+' · '+x.lots+' lots';left.appendChild(d);const del=document.createElement('button');del.className='btn secondary';del.textContent='Delete';del.onclick=()=>{localStorage.setItem(journalKey(),JSON.stringify(readJournal().filter(t=>t.id!==x.id)));renderJournal();};row.append(left,del);return row;});$('journalList').replaceChildren(...rows);}
+function exportJournal(){const a=readJournal();if(!a.length)return alert('No entries to export.');const cols=['date','symbol','side','entry','exit','lots','contract','pnl','notes'];const csv=[cols.join(','),...a.map(x=>cols.map(k=>'"'+String(x[k]??'').replace(/"/g,'""')+'"').join(','))].join(String.fromCharCode(10));const url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));const link=document.createElement('a');link.href=url;link.download='ngr-trading-journal.csv';link.click();URL.revokeObjectURL(url);}
+function calcSentiment(){const score=['sDollar','sYields','sRisk','sTech'].reduce((n,id)=>n+Number($(id).value),0);$('sentimentResult').textContent=(score>=2?'Bullish observations':score<=-2?'Bearish observations':'Mixed / neutral observations')+' · '+(score>0?'+':'')+score;$('sentimentExplain').textContent='Based only on your manual inputs. Verify source data independently; this is not a trade signal.';}
+function calcProRisk(){const b=+$('rpBalance').value,r=+$('rpRisk').value,e=+$('rpEntry').value,s=+$('rpStop').value,t=+$('rpTarget').value,c=+$('rpContract').value,max=Number(localStorage.getItem('ngrMaxRisk')||1),dist=Math.abs(e-s),reward=Math.abs(t-e),valid=b>0&&r>0&&e>0&&s>0&&t>0&&c>0&&dist>0&&((s<e&&t>e)||(s>e&&t<e));if(!valid){$('rpLots').textContent='Check levels';$('rpDetails').textContent='BUY requires stop below entry and target above; SELL requires the reverse.';return;}if(r>max){$('rpLots').textContent='Above saved max risk ('+max+'%)';$('rpDetails').textContent='Lower risk or adjust your maximum-risk preference in Settings.';return;}const cash=b*r/100,lots=cash/(dist*c),potential=reward*lots*c;$('rpLots').textContent=lots.toFixed(4)+' lots';$('rpDetails').textContent='Planned risk ≈ $'+cash.toFixed(2)+' · Potential gross reward ≈ $'+potential.toFixed(2)+' · R:R '+(reward/dist).toFixed(2)+':1. Excludes trading costs and broker volume constraints.';}
+function runGoldAnalyst(){const score=['aStructure','aLocation','aConfirm'].reduce((n,id)=>n+Number($(id).value),0),news=Number($('aNews').value);$('analystResult').textContent=(score>=2?'Bullish factors align':score<=-2?'Bearish factors align':'Setup is mixed / unclear')+' · score '+(score>0?'+':'')+score;$('analystExplain').textContent='Timeframe: '+$('aTime').value+'. '+(news===-1?'News risk flagged; consider waiting.':news===0?'News not verified; check the live calendar.':'You marked news checked; independently confirm it.')+' This is a rules-based summary, not AI, a forecast or a buy/sell signal.';}
+function renderEventChecklist(){$('eventChecklist').innerHTML=['FOMC / Fed decision','US CPI and PCE inflation','US employment / NFP','Federal Reserve speeches','US dollar and Treasury yield moves'].map(x=>'<label class="check"><input type="checkbox"><span>'+x+'</span></label>').join('');}
+function profilePhotoKey(){return 'ngrProfilePhoto_'+(auth.currentUser?.uid||'local');}
+function renderProfile(){
+  const u=auth.currentUser;if(!u)return;
+  const name=u.displayName||'';
+  $('profileName').value=name;
+  $('profileDisplayName').textContent=name||'Your name';
+  $('profileInitial').textContent=(name.trim()[0]||u.email?.[0]||'N').toUpperCase();
+  const photo=localStorage.getItem(profilePhotoKey())||u.photoURL||'';
+  if(photo){$('profilePreview').src=photo;$('profilePreview').style.display='block';$('profileInitial').style.display='none';}
+  else{$('profilePreview').style.display='none';$('profileInitial').style.display='grid';}
+  const avatarImg=$('settingsAvatarImg'),avatarInitial=$('settingsAvatarInitial');
+  if(avatarImg&&avatarInitial){if(photo){avatarImg.src=photo;avatarImg.style.display='block';avatarInitial.style.display='none';}else{avatarImg.removeAttribute('src');avatarImg.style.display='none';avatarInitial.textContent=(name.trim()[0]||u.email?.[0]||'N').toUpperCase();avatarInitial.style.display='grid';}}
+}
+function handleProfilePhoto(input){
+  const file=input.files&&input.files[0];if(!file)return;
+  if(!file.type.startsWith('image/')){alert('Please choose an image file.');input.value='';return;}
+  if(file.size>8*1024*1024){alert('Please choose an image smaller than 8 MB.');input.value='';return;}
+  const reader=new FileReader();
+  reader.onload=()=>{const img=new Image();img.onload=()=>{
+    const canvas=document.createElement('canvas');const scale=Math.min(1,256/Math.max(img.width,img.height));canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);
+    canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+    const data=canvas.toDataURL('image/jpeg',0.78);
+    try{localStorage.setItem(profilePhotoKey(),data);renderProfile();$('profileStatus').textContent='Photo saved on this device. Tap Save profile to save your name.';}
+    catch(e){alert('Could not save this photo. Please choose a smaller image or clear some device storage.');}
+  };img.onerror=()=>alert('Could not read this image. Please try another.');img.src=reader.result;};
+  reader.readAsDataURL(file);
+}
+async function saveProfile(){
+  const name=$('profileName').value.trim();if(!name)return alert('Please enter your name.');
+  const btn=document.querySelector('[onclick="saveProfile()"]');if(btn){btn.disabled=true;btn.textContent='Saving…';}
+  try{await auth.currentUser.updateProfile({displayName:name});renderProfile();$('profileStatus').textContent='Your name has been saved to your sign-in account. Your photo is saved on this device.';}
+  catch(e){$('profileStatus').textContent='Could not save your name: '+e.message;}
+  finally{if(btn){btn.disabled=false;btn.textContent='Save profile';}}
+}
+function submitFeedback(){
+  const type=$('feedbackType').value;const message=$('feedbackMessage').value.trim();
+  if(!message)return alert('Please describe your feedback first.');
+  const title=type+': '+message.slice(0,65).replace(/\s+/g,' ');
+  const body='Feedback type: '+type+'\n\n'+message+'\n\nApp: NGR TRADES PRO\nSigned-in account: '+(auth.currentUser?.email||'Not available');
+  const url='https://github.com/kumailabbas007/NGR-Trades-Pro/issues/new?title='+encodeURIComponent(title)+'&body='+encodeURIComponent(body);
+  window.open(url,'_blank','noopener');
+}
+function setTheme(t){document.documentElement.classList.toggle('light',t==='light');localStorage.setItem('ngrTheme',t);}
+function savePrefs(){
+  const maxRisk=Number($('maxRisk').value);
+  if(!(maxRisk>=0.1&&maxRisk<=5))return alert('Maximum risk must be between 0.1% and 5%.');
+  localStorage.setItem('ngrMaxRisk',maxRisk);
+  localStorage.setItem('ngrProLevel',$('levelSelect').value);
+  $('pRisk').value=String(maxRisk);
+  alert('Preferences saved on this device. Position sizing now enforces this maximum.');
+}
+function chooseLevel(v,btn){selectedLevel=v;document.querySelectorAll('#welcomeModal .row .pill').forEach(x=>x.classList.remove('selected'));btn.classList.add('selected')}
+function finishWelcome(skip){if(!$('riskAgree').checked)return alert('Please accept the risk disclaimer to continue.');localStorage.setItem('ngrWelcome','1');localStorage.setItem('ngrProLevel',selectedLevel);$('levelSelect').value=selectedLevel;$('welcomeModal').classList.remove('open')}
+function mountTVWidget(id,file,config){const host=$(id);if(!host||host.dataset.mounted)return;host.dataset.mounted='1';host.replaceChildren();const root=document.createElement('div');root.className='tradingview-widget-container';root.style.width='100%';const inner=document.createElement('div');inner.className='tradingview-widget-container__widget';inner.style.width='100%';root.appendChild(inner);const script=document.createElement('script');script.async=true;script.src='https://s3.tradingview.com/external-embedding/'+file;script.textContent=JSON.stringify(config);root.appendChild(script);host.appendChild(root);}
+function initLiveWidgets(){mountTVWidget('tvTechnical','embed-widget-technical-analysis.js',{interval:'1h',width:'100%',isTransparent:true,height:390,symbol:'OANDA:XAUUSD',showIntervalTabs:true,displayMode:'single',locale:'en',colorTheme:'dark'});mountTVWidget('tvEvents','embed-widget-events.js',{width:'100%',height:480,colorTheme:'dark',isTransparent:true,locale:'en',importanceFilter:'-1,0,1',countryFilter:'us'});mountTVWidget('tvNews','embed-widget-timeline.js',{feedMode:'market',market:'commodities',width:'100%',height:420,colorTheme:'dark',isTransparent:true,displayMode:'regular',locale:'en'});}
+function updateSessionClocks(){const sessions=[['Tokyo','Asia/Tokyo',0,9],['London','Europe/London',8,17],['NewYork','America/New_York',8,17]],now=new Date();sessions.forEach(([key,zone,start,end])=>{const parts=new Intl.DateTimeFormat('en-GB',{timeZone:zone,hour:'2-digit',minute:'2-digit',hourCycle:'h23',weekday:'short'}).formatToParts(now),hour=Number(parts.find(p=>p.type==='hour')?.value||0),minute=Number(parts.find(p=>p.type==='minute')?.value||0),day=parts.find(p=>p.type==='weekday')?.value||'',open=day!=='Sat'&&day!=='Sun'&&hour>=start&&hour<end;const st=$('session'+key),tm=$('time'+key);if(st)st.textContent=open?'OPEN':'CLOSED';if(tm)tm.textContent=String(hour).padStart(2,'0')+':'+String(minute).padStart(2,'0')+' local';});const local=$('sessionLocal');if(local)local.textContent='Pakistan time · '+new Intl.DateTimeFormat('en-PK',{timeZone:'Asia/Karachi',dateStyle:'medium',timeStyle:'short'}).format(now)+' · Approximate session windows.';}
+function updateAlertCondition(){const c=$('alertCond')?.value,pct=c==='percent_up'||c==='percent_down';$('alertPriceField')?.classList.toggle('hide',pct);$('alertPercentField')?.classList.toggle('hide',!pct);}
+function touchLearningStreak(){const uid=auth.currentUser?.uid||'local',key='ngrLearningStreak_'+uid,today=new Date().toISOString().slice(0,10);let d={last:'',count:0};try{d=JSON.parse(localStorage.getItem(key)||'{}')}catch(e){}if(d.last!==today){const y=new Date();y.setDate(y.getDate()-1);d.count=d.last===y.toISOString().slice(0,10)?(Number(d.count)||0)+1:1;d.last=today;localStorage.setItem(key,JSON.stringify(d));}return Number(d.count)||1;}
+function updateProProgress(){const done=JSON.parse(localStorage.getItem('ngrLessons')||'[]'),pct=Math.round(done.length/lessons.length*100),trades=readJournal(),streak=touchLearningStreak();if($('progressLessons'))$('progressLessons').textContent=pct+'%';if($('progressStreak'))$('progressStreak').textContent=streak+' days';if($('progressTrades'))$('progressTrades').textContent=trades.length;if($('progressBarPro'))$('progressBarPro').style.width=pct+'%';const items=[['🌱','First steps','Complete your first lesson',done.length>=1],['📚','Student','Complete 5 lessons',done.length>=5],['🎓','Graduate','Complete every beginner lesson',done.length>=lessons.length],['🔥','Consistency','Build a 3-day learning streak',streak>=3],['📝','Journal keeper','Record your first trade',trades.length>=1],['📊','Review pro','Record 10 trades',trades.length>=10],['🛡️','Risk first','Complete the pre-trade checklist',localStorage.getItem('ngrChecklistDone')==='1']];const grid=$('achievementGrid');if(grid)grid.replaceChildren(...items.map(([emoji,name,desc,ok])=>{const el=document.createElement('div');el.className='achievement'+(ok?'':' locked');const icon=document.createElement('span'),body=document.createElement('div'),b=document.createElement('b'),sm=document.createElement('small');icon.textContent=emoji;b.textContent=name;sm.textContent=desc;body.append(b,sm);el.append(icon,body);return el;}));}
+function addZyroMessage(message,who){const host=$('zyroConversation');if(!host)return;const el=document.createElement('div');el.className='zyro-message '+(who==='user'?'zyro-user':'zyro-bot');el.textContent=message;host.appendChild(el);host.scrollTop=host.scrollHeight;}
+async function askZyroCoach(){const box=$('zyroQuestion'),btn=$('zyroSend'),status=$('zyroStatus'),message=box.value.trim();if(!message)return;if(message.length>2000)return alert('Keep your question under 2,000 characters.');addZyroMessage(message,'user');box.value='';btn.disabled=true;btn.textContent='Thinking…';status.textContent='Connecting securely to ZYRO…';try{const r=await fetch(ALERT_API+'/ai-coach',{method:'POST',headers:await authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({message})}),d=await r.json();if(!r.ok)throw Error(d.detail||d.error||'HTTP '+r.status);addZyroMessage(d.answer||'No response returned.','bot');status.textContent='Educational response · Verify important information independently.';}catch(e){addZyroMessage('I could not connect right now. '+e.message,'bot');status.textContent=e.message.includes('not configured')?'AI provider setup is still required on the secure server.':'Connection unavailable. Please try again later.';}finally{btn.disabled=false;btn.textContent='Ask ZYRO';}}
+function init(){setTheme(localStorage.getItem('ngrTheme')||'dark');$('themeSelect').value=localStorage.getItem('ngrTheme')||'dark';$('maxRisk').value=localStorage.getItem('ngrMaxRisk')||'1';$('pRisk').value=localStorage.getItem('ngrMaxRisk')||'1';$('levelSelect').value=localStorage.getItem('ngrProLevel')||'Beginner';$('favBtn').textContent=localStorage.getItem('ngrFav')||'☆';renderCourses();renderRules();renderGlossary();renderQuiz();renderChecklist();renderEventChecklist();renderJournal();}
+init();
+auth.onAuthStateChanged(async user=>{
+  if(user&&user.emailVerified){
+    document.body.classList.add("authenticated");$("authGate").classList.add("hide");$("verifyPanel").classList.add("hide");
+    if($("accountEmail"))$("accountEmail").textContent=user.email||"Google account";
+    if($("profileName"))renderProfile();
+    try{
+      const headers=await authHeaders({"Content-Type":"application/json"});
+      const claimed=await fetch(ALERT_API+"/claim-device",{method:"POST",headers,body:JSON.stringify({deviceToken})});
+      if(!claimed.ok)throw Error("Alert migration HTTP "+claimed.status);
+      const result=await claimed.json();if(result.migrated>0)console.info("Migrated existing alerts:",result.migrated);
+    }catch(e){console.warn("Existing alert migration will retry:",e.message);}
+    syncAlerts();
+    if(!localStorage.getItem("ngrWelcome"))$("welcomeModal").classList.add("open");
+  }else{
+    document.body.classList.remove("authenticated");$("authGate").classList.remove("hide");
+    if($("profileName")){ $("profileName").value=""; $("profileDisplayName").textContent="Your name"; }
+    if($("accountEmail"))$("accountEmail").textContent="Not signed in";
+    if(user&&!user.emailVerified){showVerification();showAuthMessage("Please verify "+(user.email||"your email")+" to continue.");}
+    else $("verifyPanel").classList.add("hide");
+  }
+});
+auth.getRedirectResult().catch(e=>showAuthMessage(e.message||"Google sign-in failed."));
+window.addEventListener('focus',syncAlerts);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncAlerts()});
+if('serviceWorker'in navigator&&location.protocol.startsWith('http'))addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+</script></body></html>+Number(t.pnl||0).toFixed(2);return el;}));}if(!a.length){$('journalList').textContent='No entries yet.';updateProProgress();return;}const rows=a.slice(0,30).map(x=>{const row=document.createElement('div');row.className='item';const left=document.createElement('div');const b=document.createElement('b');b.textContent=x.symbol+' '+x.side+' · '+(x.pnl>=0?'+':'')+'$'+Number(x.pnl).toFixed(2);left.appendChild(b);const d=document.createElement('div');d.className='small muted';d.textContent=new Date(x.date).toLocaleString()+' · '+x.entry+' → '+x.exit+' · '+x.lots+' lots';left.appendChild(d);const del=document.createElement('button');del.className='btn secondary';del.textContent='Delete';del.onclick=()=>{localStorage.setItem(journalKey(),JSON.stringify(readJournal().filter(t=>t.id!==x.id)));renderJournal();};row.append(left,del);return row;});$('journalList').replaceChildren(...rows);}
+function exportJournal(){const a=readJournal();if(!a.length)return alert('No entries to export.');const cols=['date','symbol','side','entry','exit','lots','contract','pnl','notes'];const csv=[cols.join(','),...a.map(x=>cols.map(k=>'"'+String(x[k]??'').replace(/"/g,'""')+'"').join(','))].join(String.fromCharCode(10));const url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));const link=document.createElement('a');link.href=url;link.download='ngr-trading-journal.csv';link.click();URL.revokeObjectURL(url);}
+function calcSentiment(){const score=['sDollar','sYields','sRisk','sTech'].reduce((n,id)=>n+Number($(id).value),0);$('sentimentResult').textContent=(score>=2?'Bullish observations':score<=-2?'Bearish observations':'Mixed / neutral observations')+' · '+(score>0?'+':'')+score;$('sentimentExplain').textContent='Based only on your manual inputs. Verify source data independently; this is not a trade signal.';}
+function calcProRisk(){const b=+$('rpBalance').value,r=+$('rpRisk').value,e=+$('rpEntry').value,s=+$('rpStop').value,t=+$('rpTarget').value,c=+$('rpContract').value,max=Number(localStorage.getItem('ngrMaxRisk')||1),dist=Math.abs(e-s),reward=Math.abs(t-e),valid=b>0&&r>0&&e>0&&s>0&&t>0&&c>0&&dist>0&&((s<e&&t>e)||(s>e&&t<e));if(!valid){$('rpLots').textContent='Check levels';$('rpDetails').textContent='BUY requires stop below entry and target above; SELL requires the reverse.';return;}if(r>max){$('rpLots').textContent='Above saved max risk ('+max+'%)';$('rpDetails').textContent='Lower risk or adjust your maximum-risk preference in Settings.';return;}const cash=b*r/100,lots=cash/(dist*c),potential=reward*lots*c;$('rpLots').textContent=lots.toFixed(4)+' lots';$('rpDetails').textContent='Planned risk ≈ $'+cash.toFixed(2)+' · Potential gross reward ≈ $'+potential.toFixed(2)+' · R:R '+(reward/dist).toFixed(2)+':1. Excludes trading costs and broker volume constraints.';}
+function runGoldAnalyst(){const score=['aStructure','aLocation','aConfirm'].reduce((n,id)=>n+Number($(id).value),0),news=Number($('aNews').value);$('analystResult').textContent=(score>=2?'Bullish factors align':score<=-2?'Bearish factors align':'Setup is mixed / unclear')+' · score '+(score>0?'+':'')+score;$('analystExplain').textContent='Timeframe: '+$('aTime').value+'. '+(news===-1?'News risk flagged; consider waiting.':news===0?'News not verified; check the live calendar.':'You marked news checked; independently confirm it.')+' This is a rules-based summary, not AI, a forecast or a buy/sell signal.';}
+function renderEventChecklist(){$('eventChecklist').innerHTML=['FOMC / Fed decision','US CPI and PCE inflation','US employment / NFP','Federal Reserve speeches','US dollar and Treasury yield moves'].map(x=>'<label class="check"><input type="checkbox"><span>'+x+'</span></label>').join('');}
+function profilePhotoKey(){return 'ngrProfilePhoto_'+(auth.currentUser?.uid||'local');}
+function renderProfile(){
+  const u=auth.currentUser;if(!u)return;
+  const name=u.displayName||'';
+  $('profileName').value=name;
+  $('profileDisplayName').textContent=name||'Your name';
+  $('profileInitial').textContent=(name.trim()[0]||u.email?.[0]||'N').toUpperCase();
+  const photo=localStorage.getItem(profilePhotoKey())||u.photoURL||'';
+  if(photo){$('profilePreview').src=photo;$('profilePreview').style.display='block';$('profileInitial').style.display='none';}
+  else{$('profilePreview').style.display='none';$('profileInitial').style.display='grid';}
+  const avatarImg=$('settingsAvatarImg'),avatarInitial=$('settingsAvatarInitial');
+  if(avatarImg&&avatarInitial){if(photo){avatarImg.src=photo;avatarImg.style.display='block';avatarInitial.style.display='none';}else{avatarImg.removeAttribute('src');avatarImg.style.display='none';avatarInitial.textContent=(name.trim()[0]||u.email?.[0]||'N').toUpperCase();avatarInitial.style.display='grid';}}
+}
+function handleProfilePhoto(input){
+  const file=input.files&&input.files[0];if(!file)return;
+  if(!file.type.startsWith('image/')){alert('Please choose an image file.');input.value='';return;}
+  if(file.size>8*1024*1024){alert('Please choose an image smaller than 8 MB.');input.value='';return;}
+  const reader=new FileReader();
+  reader.onload=()=>{const img=new Image();img.onload=()=>{
+    const canvas=document.createElement('canvas');const scale=Math.min(1,256/Math.max(img.width,img.height));canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);
+    canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+    const data=canvas.toDataURL('image/jpeg',0.78);
+    try{localStorage.setItem(profilePhotoKey(),data);renderProfile();$('profileStatus').textContent='Photo saved on this device. Tap Save profile to save your name.';}
+    catch(e){alert('Could not save this photo. Please choose a smaller image or clear some device storage.');}
+  };img.onerror=()=>alert('Could not read this image. Please try another.');img.src=reader.result;};
+  reader.readAsDataURL(file);
+}
+async function saveProfile(){
+  const name=$('profileName').value.trim();if(!name)return alert('Please enter your name.');
+  const btn=document.querySelector('[onclick="saveProfile()"]');if(btn){btn.disabled=true;btn.textContent='Saving…';}
+  try{await auth.currentUser.updateProfile({displayName:name});renderProfile();$('profileStatus').textContent='Your name has been saved to your sign-in account. Your photo is saved on this device.';}
+  catch(e){$('profileStatus').textContent='Could not save your name: '+e.message;}
+  finally{if(btn){btn.disabled=false;btn.textContent='Save profile';}}
+}
+function submitFeedback(){
+  const type=$('feedbackType').value;const message=$('feedbackMessage').value.trim();
+  if(!message)return alert('Please describe your feedback first.');
+  const title=type+': '+message.slice(0,65).replace(/\s+/g,' ');
+  const body='Feedback type: '+type+'\n\n'+message+'\n\nApp: NGR TRADES PRO\nSigned-in account: '+(auth.currentUser?.email||'Not available');
+  const url='https://github.com/kumailabbas007/NGR-Trades-Pro/issues/new?title='+encodeURIComponent(title)+'&body='+encodeURIComponent(body);
+  window.open(url,'_blank','noopener');
+}
+function setTheme(t){document.documentElement.classList.toggle('light',t==='light');localStorage.setItem('ngrTheme',t);}
+function savePrefs(){
+  const maxRisk=Number($('maxRisk').value);
+  if(!(maxRisk>=0.1&&maxRisk<=5))return alert('Maximum risk must be between 0.1% and 5%.');
+  localStorage.setItem('ngrMaxRisk',maxRisk);
+  localStorage.setItem('ngrProLevel',$('levelSelect').value);
+  $('pRisk').value=String(maxRisk);
+  alert('Preferences saved on this device. Position sizing now enforces this maximum.');
+}
+function chooseLevel(v,btn){selectedLevel=v;document.querySelectorAll('#welcomeModal .row .pill').forEach(x=>x.classList.remove('selected'));btn.classList.add('selected')}
+function finishWelcome(skip){if(!$('riskAgree').checked)return alert('Please accept the risk disclaimer to continue.');localStorage.setItem('ngrWelcome','1');localStorage.setItem('ngrProLevel',selectedLevel);$('levelSelect').value=selectedLevel;$('welcomeModal').classList.remove('open')}
+function mountTVWidget(id,file,config){const host=$(id);if(!host||host.dataset.mounted)return;host.dataset.mounted='1';host.replaceChildren();const root=document.createElement('div');root.className='tradingview-widget-container';root.style.width='100%';const inner=document.createElement('div');inner.className='tradingview-widget-container__widget';inner.style.width='100%';root.appendChild(inner);const script=document.createElement('script');script.async=true;script.src='https://s3.tradingview.com/external-embedding/'+file;script.textContent=JSON.stringify(config);root.appendChild(script);host.appendChild(root);}
+function initLiveWidgets(){mountTVWidget('tvTechnical','embed-widget-technical-analysis.js',{interval:'1h',width:'100%',isTransparent:true,height:390,symbol:'OANDA:XAUUSD',showIntervalTabs:true,displayMode:'single',locale:'en',colorTheme:'dark'});mountTVWidget('tvEvents','embed-widget-events.js',{width:'100%',height:480,colorTheme:'dark',isTransparent:true,locale:'en',importanceFilter:'-1,0,1',countryFilter:'us'});mountTVWidget('tvNews','embed-widget-timeline.js',{feedMode:'market',market:'commodities',width:'100%',height:420,colorTheme:'dark',isTransparent:true,displayMode:'regular',locale:'en'});}
+function updateSessionClocks(){const sessions=[['Tokyo','Asia/Tokyo',0,9],['London','Europe/London',8,17],['NewYork','America/New_York',8,17]],now=new Date();sessions.forEach(([key,zone,start,end])=>{const parts=new Intl.DateTimeFormat('en-GB',{timeZone:zone,hour:'2-digit',minute:'2-digit',hourCycle:'h23',weekday:'short'}).formatToParts(now),hour=Number(parts.find(p=>p.type==='hour')?.value||0),minute=Number(parts.find(p=>p.type==='minute')?.value||0),day=parts.find(p=>p.type==='weekday')?.value||'',open=day!=='Sat'&&day!=='Sun'&&hour>=start&&hour<end;const st=$('session'+key),tm=$('time'+key);if(st)st.textContent=open?'OPEN':'CLOSED';if(tm)tm.textContent=String(hour).padStart(2,'0')+':'+String(minute).padStart(2,'0')+' local';});const local=$('sessionLocal');if(local)local.textContent='Pakistan time · '+new Intl.DateTimeFormat('en-PK',{timeZone:'Asia/Karachi',dateStyle:'medium',timeStyle:'short'}).format(now)+' · Approximate session windows.';}
+function updateAlertCondition(){const c=$('alertCond')?.value,pct=c==='percent_up'||c==='percent_down';$('alertPriceField')?.classList.toggle('hide',pct);$('alertPercentField')?.classList.toggle('hide',!pct);}
+function touchLearningStreak(){const uid=auth.currentUser?.uid||'local',key='ngrLearningStreak_'+uid,today=new Date().toISOString().slice(0,10);let d={last:'',count:0};try{d=JSON.parse(localStorage.getItem(key)||'{}')}catch(e){}if(d.last!==today){const y=new Date();y.setDate(y.getDate()-1);d.count=d.last===y.toISOString().slice(0,10)?(Number(d.count)||0)+1:1;d.last=today;localStorage.setItem(key,JSON.stringify(d));}return Number(d.count)||1;}
+function updateProProgress(){const done=JSON.parse(localStorage.getItem('ngrLessons')||'[]'),pct=Math.round(done.length/lessons.length*100),trades=readJournal(),streak=touchLearningStreak();if($('progressLessons'))$('progressLessons').textContent=pct+'%';if($('progressStreak'))$('progressStreak').textContent=streak+' days';if($('progressTrades'))$('progressTrades').textContent=trades.length;if($('progressBarPro'))$('progressBarPro').style.width=pct+'%';const items=[['🌱','First steps','Complete your first lesson',done.length>=1],['📚','Student','Complete 5 lessons',done.length>=5],['🎓','Graduate','Complete every beginner lesson',done.length>=lessons.length],['🔥','Consistency','Build a 3-day learning streak',streak>=3],['📝','Journal keeper','Record your first trade',trades.length>=1],['📊','Review pro','Record 10 trades',trades.length>=10],['🛡️','Risk first','Complete the pre-trade checklist',localStorage.getItem('ngrChecklistDone')==='1']];const grid=$('achievementGrid');if(grid)grid.replaceChildren(...items.map(([emoji,name,desc,ok])=>{const el=document.createElement('div');el.className='achievement'+(ok?'':' locked');const icon=document.createElement('span'),body=document.createElement('div'),b=document.createElement('b'),sm=document.createElement('small');icon.textContent=emoji;b.textContent=name;sm.textContent=desc;body.append(b,sm);el.append(icon,body);return el;}));}
+function addZyroMessage(message,who){const host=$('zyroConversation');if(!host)return;const el=document.createElement('div');el.className='zyro-message '+(who==='user'?'zyro-user':'zyro-bot');el.textContent=message;host.appendChild(el);host.scrollTop=host.scrollHeight;}
+async function askZyroCoach(){const box=$('zyroQuestion'),btn=$('zyroSend'),status=$('zyroStatus'),message=box.value.trim();if(!message)return;if(message.length>2000)return alert('Keep your question under 2,000 characters.');addZyroMessage(message,'user');box.value='';btn.disabled=true;btn.textContent='Thinking…';status.textContent='Connecting securely to ZYRO…';try{const r=await fetch(ALERT_API+'/ai-coach',{method:'POST',headers:await authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({message})}),d=await r.json();if(!r.ok)throw Error(d.detail||d.error||'HTTP '+r.status);addZyroMessage(d.answer||'No response returned.','bot');status.textContent='Educational response · Verify important information independently.';}catch(e){addZyroMessage('I could not connect right now. '+e.message,'bot');status.textContent=e.message.includes('not configured')?'AI provider setup is still required on the secure server.':'Connection unavailable. Please try again later.';}finally{btn.disabled=false;btn.textContent='Ask ZYRO';}}
 function init(){setTheme(localStorage.getItem('ngrTheme')||'dark');$('themeSelect').value=localStorage.getItem('ngrTheme')||'dark';$('maxRisk').value=localStorage.getItem('ngrMaxRisk')||'1';$('pRisk').value=localStorage.getItem('ngrMaxRisk')||'1';$('levelSelect').value=localStorage.getItem('ngrProLevel')||'Beginner';$('favBtn').textContent=localStorage.getItem('ngrFav')||'☆';renderCourses();renderRules();renderGlossary();renderQuiz();renderChecklist();renderEventChecklist();renderJournal();}
 init();
 auth.onAuthStateChanged(async user=>{
