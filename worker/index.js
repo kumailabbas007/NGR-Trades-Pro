@@ -171,21 +171,23 @@ export default {async fetch(request,env){
     }catch(e){return json({error:"Could not migrate existing alerts",detail:String(e?.message||e)},503);}
   }
 
-  if(url.pathname==="/test-notification"&&request.method==="POST"){\n    const topic=await env.ALERTS_KV.get(NOTIFY_PREFIX+user.uid);if(!validTopic(topic))return json({error:"Notification route not initialized. Refresh the alert screen."},409);
+  if(url.pathname==="/test-notification"&&request.method==="POST"){
+    const topic=await env.ALERTS_KV.get(NOTIFY_PREFIX+user.uid);if(!validTopic(topic))return json({error:"Notification route not initialized. Refresh the alert screen."},409);
     try{await request.json().catch(()=>({}));await sendNtfy(topic,"NGR TRADES PRO · Test notification","Success! Your NGR TRADES PRO notification route reached ntfy. Check that this message appears on your phone. This test does not verify future market alerts.");return json({success:true,acceptedByNtfy:true,message:"ntfy accepted the test notification"});}
     catch(e){const status=e?.status===429?429:502;return json({error:"Test notification failed",detail:String(e?.message||e),retryAfterSeconds:e?.retryAfterSeconds||null},status);}
   }
-  if(url.pathname==="/notification-topic"&&request.method==="GET"){try{let topic=await env.ALERTS_KV.get(NOTIFY_PREFIX+user.uid);if(!topic){topic="ngr_"+Array.from(crypto.getRandomValues(new Uint8Array(24)),b=>b.toString(16).padStart(2,"0")).join("");await env.ALERTS_KV.put(NOTIFY_PREFIX+user.uid,topic);}const alerts=await read(env,key);if(alerts.some(a=>a.topic!==topic)){for(const a of alerts)a.topic=topic;await write(env,key,alerts);}return json({topic});}catch(e){return json({error:"Notification setup failed",detail:String(e?.message||e)},503);}}\n  if(url.pathname==="/price"&&request.method==="GET"){try{return json(await getFreshPrice());}catch(e){return json({error:"Price feed unavailable",detail:String(e?.message||e)},503);}}
+  if(url.pathname==="/notification-topic"&&request.method==="GET"){try{let topic=await env.ALERTS_KV.get(NOTIFY_PREFIX+user.uid);if(!topic){topic="ngr_"+Array.from(crypto.getRandomValues(new Uint8Array(24)),b=>b.toString(16).padStart(2,"0")).join("");await env.ALERTS_KV.put(NOTIFY_PREFIX+user.uid,topic);}const alerts=await read(env,key);if(alerts.some(a=>a.topic!==topic)){for(const a of alerts)a.topic=topic;await write(env,key,alerts);}return json({topic});}catch(e){return json({error:"Notification setup failed",detail:String(e?.message||e)},503);}}
+  if(url.pathname==="/price"&&request.method==="GET"){try{return json(await getFreshPrice());}catch(e){return json({error:"Price feed unavailable",detail:String(e?.message||e)},503);}}
   if(url.pathname==="/alerts"&&request.method==="GET"){try{return json({alerts:await read(env,key)});}catch(e){return json({error:"Alert storage failed",detail:String(e?.message||e)},503);}}
   if(url.pathname==="/alerts"&&request.method==="POST"){
     try{
       if(!(request.headers.get("Content-Type")||"").toLowerCase().includes("application/json"))return json({error:"JSON required"},415);
       const raw=await request.text();if(raw.length>4096)return json({error:"Too large"},413);let b;try{b=JSON.parse(raw);}catch{return json({error:"Invalid JSON"},400);}
-      const level=Number(b.level),condition=b.condition,expiry=ALLOWED_EXPIRY.has(b.expiry)?b.expiry:"Until deleted",topic=await env.ALERTS_KV.get(NOTIFY_PREFIX+user.uid),isPercent=condition==="percent_up"||condition==="percent_down";
-      if(!Number.isFinite(level)||level<=(isPercent?0:0)||level>(isPercent?20:1000000)||!["above","below","percent_up","percent_down"].includes(condition)||!validTopic(topic))return json({error:"Invalid target, movement, condition or topic"},400);
+      const level=Number(b.level),condition=b.condition,expiry="Until deleted",topic=await env.ALERTS_KV.get(NOTIFY_PREFIX+user.uid),isPercent=condition==="percent_up"||condition==="percent_down";
+      if(!Number.isFinite(level)||level<=0||level>1000000||condition!=="touch"||!validTopic(topic)return json({error:"Invalid target, movement, condition or topic"},400);
       const alerts=await read(env,key);if(alerts.length>=MAX_ALERTS_PER_DEVICE)return json({error:"Limit of 20 alerts per account"},429);
-      const baselinePrice=isPercent?(await getFreshPrice()).price:null;
-      const now=Date.now(),alert={id:crypto.randomUUID(),symbol:"XAUUSD",condition,level,baselinePrice,topic,createdAt:now,expiry,expiresAt:expiryTime(expiry,now)};
+      const baselinePrice=null;
+      const now=Date.now(),alert={id:crypto.randomUUID(),symbol:"XAUUSD",condition,level,baselinePrice,topic,lastObservedPrice:(await getFreshPrice()).price,createdAt:now,expiry,expiresAt:expiryTime(expiry,now)};
       alerts.push(alert);await env.ALERTS_KV.put(key,JSON.stringify(alerts));return json({success:true,alert},201);
     }catch(e){console.log("Alert create error:",e?.message||e);return json({error:"Alert storage failed",detail:String(e?.message||e)},503);}
   }
@@ -209,8 +211,8 @@ async function checkAlerts(env){
           const keep=[];let changed=false;
           for(const a of alerts){
             if(a.retryAfterAt&&Date.now()<a.retryAfterAt){keep.push(a);continue;}
-            let hit=false,targetText="";if(a.condition==="above"){hit=market.price>=a.level;targetText="Target at or above $"+Number(a.level).toFixed(2);}else if(a.condition==="below"){hit=market.price<=a.level;targetText="Target at or below $"+Number(a.level).toFixed(2);}else{const baseline=Number(a.baselinePrice),move=baseline>0?((market.price-baseline)/baseline)*100:0;hit=a.condition==="percent_up"?move>=Number(a.level):move<=-Number(a.level);targetText=(a.condition==="percent_up"?"Rise ":"Fall ")+Number(a.level).toFixed(2)+"% from baseline $"+baseline.toFixed(2)+" (current move "+(move>=0?"+":"")+move.toFixed(2)+"%).";}
-            if(!hit){keep.push(a);continue;}
+            let hit=false,targetText="";if(a.condition==="touch"){const prev=Number(a.lastObservedPrice);hit=market.price===a.level||(prev<a.level&&market.price>=a.level)||(prev>a.level&&market.price<=a.level);targetText="Gold crossed your target $"+Number(a.level).toFixed(2)+"."; }else if(a.condition==="above"){hit=market.price>=a.level;targetText="Target at or above $"+Number(a.level).toFixed(2);}else if(a.condition==="below"){hit=market.price<=a.level;targetText="Target at or below $"+Number(a.level).toFixed(2);}else{const baseline=Number(a.baselinePrice),move=baseline>0?((market.price-baseline)/baseline)*100:0;hit=a.condition==="percent_up"?move>=Number(a.level):move<=-Number(a.level);targetText=(a.condition==="percent_up"?"Rise ":"Fall ")+Number(a.level).toFixed(2)+"% from baseline $"+baseline.toFixed(2)+" (current move "+(move>=0?"+":"")+move.toFixed(2)+"%).";}
+            if(!hit){if(a.condition==="touch")a.lastObservedPrice=market.price;keep.push(a);changed=true;continue;
             const msg=["NGR TRADES PRO | XAU/USD",targetText,"Observed spot price: $"+market.price.toFixed(2),"Price timestamp: "+market.updatedAt,"Indicative spot price; broker prices may differ. Verify before acting."].join("\\n");
             try{await sendNtfy(a.topic,"NGR Gold Price Alert",msg);changed=true;console.log("ntfy accepted alert:",a.id);}
             catch(e){if(e?.status===429){const delay=(e.retryAfterSeconds||900)*1000;a.retryAfterAt=Date.now()+delay;changed=true;console.log("ntfy rate limited; alert paused until retry:",a.id,delay);}keep.push(a);console.log("Alert delivery failed; will retry:",a.id,e?.message||e);}
