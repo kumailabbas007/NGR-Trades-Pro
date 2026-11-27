@@ -5,7 +5,7 @@ const MAX_PRICE_AGE_SECONDS = 180;
 const MAX_ALERTS_PER_DEVICE = 20;
 const ALLOWED_EXPIRY = new Set(["Until deleted", "24 hours", "7 days"]);
 const LEGACY_PREFIX = "device-alerts:";
-const USER_PREFIX = "user-alerts:";
+const USER_PREFIX = "user-alerts:";\nconst NOTIFY_PREFIX = "user-notify:";
 
 function corsHeaders(){return {"Access-Control-Allow-Origin":ALLOWED_ORIGIN,"Access-Control-Allow-Headers":"Content-Type, Authorization","Access-Control-Allow-Methods":"GET, POST, DELETE, OPTIONS","Access-Control-Max-Age":"86400","Vary":"Origin"};}
 function json(data,status=200){return new Response(JSON.stringify(data),{status,headers:{"Content-Type":"application/json; charset=utf-8",...corsHeaders()}});}
@@ -171,17 +171,17 @@ export default {async fetch(request,env){
     }catch(e){return json({error:"Could not migrate existing alerts",detail:String(e?.message||e)},503);}
   }
 
-  if(url.pathname==="/test-notification"&&request.method==="POST"){
-    try{const b=await request.json(),topic=b?.topic;if(!validTopic(topic))return json({error:"Invalid ntfy topic"},400);await sendNtfy(topic,"NGR TRADES PRO · Test notification","Success! Your NGR TRADES PRO notification route reached ntfy. Check that this message appears on your phone. This test does not verify future market alerts.");return json({success:true,acceptedByNtfy:true,message:"ntfy accepted the test notification"});}
+  if(url.pathname==="/test-notification"&&request.method==="POST"){\n    const topic=await env.ALERTS_KV.get(NOTIFY_PREFIX+user.uid);if(!validTopic(topic))return json({error:"Notification route not initialized. Refresh the alert screen."},409);
+    try{await request.json().catch(()=>({}));await sendNtfy(topic,"NGR TRADES PRO · Test notification","Success! Your NGR TRADES PRO notification route reached ntfy. Check that this message appears on your phone. This test does not verify future market alerts.");return json({success:true,acceptedByNtfy:true,message:"ntfy accepted the test notification"});}
     catch(e){const status=e?.status===429?429:502;return json({error:"Test notification failed",detail:String(e?.message||e),retryAfterSeconds:e?.retryAfterSeconds||null},status);}
   }
-  if(url.pathname==="/price"&&request.method==="GET"){try{return json(await getFreshPrice());}catch(e){return json({error:"Price feed unavailable",detail:String(e?.message||e)},503);}}
+  if(url.pathname==="/notification-topic"&&request.method==="GET"){try{let topic=await env.ALERTS_KV.get(NOTIFY_PREFIX+user.uid);if(!topic){topic="ngr_"+Array.from(crypto.getRandomValues(new Uint8Array(24)),b=>b.toString(16).padStart(2,"0")).join("");await env.ALERTS_KV.put(NOTIFY_PREFIX+user.uid,topic);}const alerts=await read(env,key);if(alerts.some(a=>a.topic!==topic)){for(const a of alerts)a.topic=topic;await write(env,key,alerts);}return json({topic});}catch(e){return json({error:"Notification setup failed",detail:String(e?.message||e)},503);}}\n  if(url.pathname==="/price"&&request.method==="GET"){try{return json(await getFreshPrice());}catch(e){return json({error:"Price feed unavailable",detail:String(e?.message||e)},503);}}
   if(url.pathname==="/alerts"&&request.method==="GET"){try{return json({alerts:await read(env,key)});}catch(e){return json({error:"Alert storage failed",detail:String(e?.message||e)},503);}}
   if(url.pathname==="/alerts"&&request.method==="POST"){
     try{
       if(!(request.headers.get("Content-Type")||"").toLowerCase().includes("application/json"))return json({error:"JSON required"},415);
       const raw=await request.text();if(raw.length>4096)return json({error:"Too large"},413);let b;try{b=JSON.parse(raw);}catch{return json({error:"Invalid JSON"},400);}
-      const level=Number(b.level),condition=b.condition,expiry=ALLOWED_EXPIRY.has(b.expiry)?b.expiry:"Until deleted",topic=b.topic,isPercent=condition==="percent_up"||condition==="percent_down";
+      const level=Number(b.level),condition=b.condition,expiry=ALLOWED_EXPIRY.has(b.expiry)?b.expiry:"Until deleted",topic=await env.ALERTS_KV.get(NOTIFY_PREFIX+user.uid),isPercent=condition==="percent_up"||condition==="percent_down";
       if(!Number.isFinite(level)||level<=(isPercent?0:0)||level>(isPercent?20:1000000)||!["above","below","percent_up","percent_down"].includes(condition)||!validTopic(topic))return json({error:"Invalid target, movement, condition or topic"},400);
       const alerts=await read(env,key);if(alerts.length>=MAX_ALERTS_PER_DEVICE)return json({error:"Limit of 20 alerts per account"},429);
       const baselinePrice=isPercent?(await getFreshPrice()).price:null;
