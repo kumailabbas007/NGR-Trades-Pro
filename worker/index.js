@@ -131,10 +131,25 @@ export default {async fetch(request,env){
       rate.count=Number(rate.count||0)+1;await env.ALERTS_KV.put(rateKey,JSON.stringify(rate),{expirationTtl:600});
       const prompt="You are ZYRO, a careful educational gold-trading coach inside NGR TRADES PRO. Help beginner traders understand XAU/USD, technical analysis, market structure, indicators, trading psychology, journal review and risk management. Never claim to know live prices or current news unless supplied in the user's message. Do not give personalized financial advice, guaranteed predictions, or buy/sell-now instructions. Encourage position sizing, stop-loss planning, independent verification and demo practice. If asked for a signal, provide a learning checklist instead. Keep answers clear and reasonably concise. User question: "+message;
       const payload={systemInstruction:{parts:[{text:"You are ZYRO, an educational trading coach. Avoid financial promises or guaranteed signals."}]},contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{temperature:0.35,maxOutputTokens:800}};
-      const model="gemini-3.8-flash";
-      const response=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+model+":generateContent?key="+encodeURIComponent(env.GEMINI_API_KEY),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload),signal:AbortSignal.timeout(30000)});
-      const data=await response.json().catch(()=>({}));
-      if(!response.ok){const msg=String(data?.error?.message||"Provider rejected the request").replace(/[\\r\\n]+/g," ").slice(0,220);console.log("ZYRO v2 provider rejection:",response.status,msg);return json({error:"ZYRO provider request failed",detail:"Gemini returned HTTP "+response.status+": "+msg},502);}
+      const models=["gemini-3.8-flash","gemini-3.5-flash-lite"];
+      let response,data={},lastStatus=0,lastMsg="";
+      for(let i=0;i<models.length;i++){
+        try{
+          response=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+models[i]+":generateContent?key="+encodeURIComponent(env.GEMINI_API_KEY),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload),signal:AbortSignal.timeout(20000)});
+          data=await response.json().catch(()=>({}));
+          if(response.ok)break;
+          lastStatus=response.status;lastMsg=String(data?.error?.message||"Provider rejected request").replace(/[\\r\\n]+/g," ").slice(0,220);
+          console.log("ZYRO v2 model failure:",models[i],response.status,lastMsg);
+          if((response.status===429||response.status===503)&&i<models.length-1)continue;
+          return json({error:"ZYRO provider request failed",detail:"Gemini returned HTTP "+response.status+": "+lastMsg,providerModel:models[i]},502);
+        }catch(err){
+          lastStatus=0;lastMsg=String(err?.name||"Connection error");
+          console.log("ZYRO v2 model connection failure:",models[i],lastMsg);
+          if((err?.name==="TimeoutError"||err?.name==="AbortError")&&i<models.length-1)continue;
+          return json({error:"ZYRO connection failed",detail:"The AI request failed before a provider response.",providerStage:"connection"},502);
+        }
+      }
+      if(!response?.ok)return json({error:"AI provider unavailable",detail:lastMsg||"All configured models failed.",providerStatus:lastStatus},502);
       const answer=(data?.candidates?.[0]?.content?.parts||[]).map(p=>p.text||"").join("\\n").trim();
       if(!answer)return json({error:"Empty AI response",detail:"The provider returned no answer text."},502);
       return json({success:true,answer});
