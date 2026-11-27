@@ -184,7 +184,7 @@ export default {async fetch(request,env){
       if(!(request.headers.get("Content-Type")||"").toLowerCase().includes("application/json"))return json({error:"JSON required"},415);
       const raw=await request.text();if(raw.length>4096)return json({error:"Too large"},413);let b;try{b=JSON.parse(raw);}catch{return json({error:"Invalid JSON"},400);}
       const level=Number(b.level),condition=b.condition,expiry="Until deleted",topic=await env.ALERTS_KV.get(NOTIFY_PREFIX+user.uid),isPercent=condition==="percent_up"||condition==="percent_down";
-      if(!Number.isFinite(level)||level<=0||level>1000000||condition!=="touch"||!validTopic(topic)return json({error:"Invalid target, movement, condition or topic"},400);
+      if(!Number.isFinite(level)||level<=0||level>1000000||condition!=="touch"||!validTopic(topic))return json({error:"Invalid target, movement, condition or topic"},400);
       const alerts=await read(env,key);if(alerts.length>=MAX_ALERTS_PER_DEVICE)return json({error:"Limit of 20 alerts per account"},429);
       const baselinePrice=null;
       const now=Date.now(),alert={id:crypto.randomUUID(),symbol:"XAUUSD",condition,level,baselinePrice,topic,lastObservedPrice:(await getFreshPrice()).price,createdAt:now,expiry,expiresAt:expiryTime(expiry,now)};
