@@ -117,6 +117,30 @@ export default {async fetch(request,env){
     }
   }
 
+  if(url.pathname==="/zyro-coach-v2"&&request.method==="POST"){
+    if(!env.GEMINI_API_KEY)return json({error:"AI provider not configured"},503);
+    try{
+      const raw=await request.text();if(raw.length>5000)return json({error:"Question too large"},413);
+      let body;try{body=JSON.parse(raw);}catch{return json({error:"Invalid JSON"},400);}
+      const message=typeof body?.message==="string"?body.message.trim():"";
+      if(!message||message.length>2000)return json({error:"Enter a question up to 2,000 characters."},400);
+      const rateKey="zyro-v2-rate:"+user.uid,now=Date.now();let rate={start:now,count:0};
+      try{rate=await env.ALERTS_KV.get(rateKey,"json")||rate;}catch{}
+      if(now-Number(rate.start)>600000)rate={start:now,count:0};
+      if(Number(rate.count)>=8)return json({error:"AI rate limit reached",detail:"Please wait a few minutes before asking ZYRO again."},429);
+      rate.count=Number(rate.count||0)+1;await env.ALERTS_KV.put(rateKey,JSON.stringify(rate),{expirationTtl:600});
+      const prompt="You are ZYRO, a careful educational gold-trading coach inside NGR TRADES PRO. Help beginner traders understand XAU/USD, technical analysis, market structure, indicators, trading psychology, journal review and risk management. Never claim to know live prices or current news unless supplied in the user's message. Do not give personalized financial advice, guaranteed predictions, or buy/sell-now instructions. Encourage position sizing, stop-loss planning, independent verification and demo practice. If asked for a signal, provide a learning checklist instead. Keep answers clear and reasonably concise. User question: "+message;
+      const payload={systemInstruction:{parts:[{text:"You are ZYRO, an educational trading coach. Avoid financial promises or guaranteed signals."}]},contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{temperature:0.35,maxOutputTokens:800}};
+      const model="gemini-3.8-flash";
+      const response=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+model+":generateContent?key="+encodeURIComponent(env.GEMINI_API_KEY),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload),signal:AbortSignal.timeout(30000)});
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok){const msg=String(data?.error?.message||"Provider rejected the request").replace(/[\\r\\n]+/g," ").slice(0,220);console.log("ZYRO v2 provider rejection:",response.status,msg);return json({error:"ZYRO provider request failed",detail:"Gemini returned HTTP "+response.status+": "+msg},502);}
+      const answer=(data?.candidates?.[0]?.content?.parts||[]).map(p=>p.text||"").join("\\n").trim();
+      if(!answer)return json({error:"Empty AI response",detail:"The provider returned no answer text."},502);
+      return json({success:true,answer});
+    }catch(e){const name=String(e?.name||"Error");console.log("ZYRO v2 connection error:",name,String(e?.message||"").slice(0,180));return json({error:"ZYRO connection failed",detail:name==="TimeoutError"||name==="AbortError"?"This AI request timed out. Please retry.":"The AI connection failed before a provider response.",providerStage:"connection"},502);}
+  }
+
   // Move existing device-only alerts into the signed-in Firebase account once.
   if(url.pathname==="/claim-device"&&request.method==="POST"){
     try{
