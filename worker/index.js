@@ -77,13 +77,13 @@ export default {async fetch(request,env){
         const googleStatus=String(googleError.status||"UNKNOWN").slice(0,60);
         const googleMessage=String(googleError.message||"No error message returned").replace(/[\\r\\n]+/g," ").slice(0,240);
         console.log("Gemini request failed:",JSON.stringify({httpStatus:response.status,status:googleStatus,message:googleMessage}));
-        let detail="Gemini rejected the request (HTTP "+response.status+", "+googleStatus+"). ";
-        if(response.status===400||response.status===401)detail+="Check that GEMINI_API_KEY is a valid Gemini API key.";
-        else if(response.status===403)detail+="Google denied this project's API access. Check project eligibility, API restrictions and billing in Google AI Studio/Cloud.";
-        else if(response.status===404)detail+="The configured Gemini model or API endpoint was not found.";
-        else if(response.status===429)detail+="The Gemini API quota or rate limit has been reached. Wait for quota reset or review usage limits.";
-        else detail+="Check the Cloudflare Worker logs for Google's error message.";
-        return json({error:"AI provider request failed",detail,providerStatus:response.status,providerCode:googleStatus},502);
+        const diagnostic=String(googleError.message||"No error message returned").replace(/[\\r\\n]+/g," ").replace(/AIza[\\w-]{20,}/g,"[REDACTED]").slice(0,240);
+        let detail="Gemini rejected the request (HTTP "+response.status+", "+googleStatus+"). Google detail: "+diagnostic;
+        if(response.status===400||response.status===401)detail+=" Check API key validity, API enablement and key restrictions in Google AI Studio/Cloud.";
+        else if(response.status===403)detail+=" Check project access, API restrictions and billing/eligibility in Google AI Studio/Cloud.";
+        else if(response.status===404)detail+=" The configured Gemini model or API endpoint was not found.";
+        else if(response.status===429)detail+=" The Gemini API quota or rate limit has been reached. Review usage limits.";
+        return json({error:"AI provider request failed",detail,providerStatus:response.status,providerCode:googleStatus,providerMessage:diagnostic},502);
       }
       const answer=(data?.candidates?.[0]?.content?.parts||[]).map(p=>p.text||"").join("\n").trim();
       if(!answer)return json({error:"Empty AI response"},502);
