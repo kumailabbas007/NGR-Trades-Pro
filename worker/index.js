@@ -72,7 +72,7 @@ export default {async fetch(request,env){
       const prompt="You are ZYRO, a careful educational gold-trading coach inside NGR TRADES PRO. Explain concepts clearly for a beginner. Focus on XAU/USD education, technical analysis concepts, risk management, trading psychology and journal review. Never claim to know live market prices or current news unless the user supplies them. Do not give personalized financial advice, guaranteed predictions, or instructions to buy/sell now. Encourage position sizing, stop-loss planning, independent verification and demo practice. If asked for a signal, explain why a single signal is unreliable and provide an educational checklist instead. Keep the response concise and structured. User question: "+message;
       const geminiPayload={systemInstruction:{parts:[{text:"You are ZYRO, an educational trading coach. You are not a financial adviser and must not issue guaranteed trade signals."}]},contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{temperature:0.4,maxOutputTokens:700}};
       // Keep each provider attempt bounded; retry the fallback on overload AND connection timeout.
-      const models=["gemini-3.8-flash","gemini-2.5-flash"];
+      const models=["gemini-3.8-flash","gemini-3.6-flash"];
       let modelUsed=models[0],response,data={},lastFailure=null;
       for(let i=0;i<models.length;i++){
         modelUsed=models[i];
