@@ -71,15 +71,25 @@ export default {async fetch(request,env){
       rate.count=Number(rate.count||0)+1;await env.ALERTS_KV.put(rateKey,JSON.stringify(rate),{expirationTtl:600});
       const prompt="You are ZYRO, a careful educational gold-trading coach inside NGR TRADES PRO. Explain concepts clearly for a beginner. Focus on XAU/USD education, technical analysis concepts, risk management, trading psychology and journal review. Never claim to know live market prices or current news unless the user supplies them. Do not give personalized financial advice, guaranteed predictions, or instructions to buy/sell now. Encourage position sizing, stop-loss planning, independent verification and demo practice. If asked for a signal, explain why a single signal is unreliable and provide an educational checklist instead. Keep the response concise and structured. User question: "+message;
       const geminiPayload={systemInstruction:{parts:[{text:"You are ZYRO, an educational trading coach. You are not a financial adviser and must not issue guaranteed trade signals."}]},contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{temperature:0.4,maxOutputTokens:700}};
-      let modelUsed="gemini-3.8-flash";
-      let response=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+modelUsed+":generateContent?key="+encodeURIComponent(env.GEMINI_API_KEY),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(geminiPayload),signal:AbortSignal.timeout(45000)});
-      let data=await response.json().catch(()=>({}));
-      // Automatically fall back to a widely available Flash model when the primary is temporarily overloaded.
-      if(response.status===503||response.status===429){
-        console.log("Primary Gemini model temporarily unavailable; trying fallback.");
-        modelUsed="gemini-2.5-flash";
-        response=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+modelUsed+":generateContent?key="+encodeURIComponent(env.GEMINI_API_KEY),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(geminiPayload),signal:AbortSignal.timeout(45000)});
-        data=await response.json().catch(()=>({}));
+      // Keep each provider attempt bounded; retry the fallback on overload AND connection timeout.
+      const models=["gemini-3.8-flash","gemini-2.5-flash"];
+      let modelUsed=models[0],response,data={},lastFailure=null;
+      for(let i=0;i<models.length;i++){
+        modelUsed=models[i];
+        try{
+          response=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+modelUsed+":generateContent?key="+encodeURIComponent(env.GEMINI_API_KEY),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(geminiPayload),signal:AbortSignal.timeout(20000)});
+          data=await response.json().catch(()=>({}));
+          if(response.status===503||response.status===429){
+            console.log("Gemini model temporarily unavailable:",modelUsed,response.status);
+            if(i<models.length-1)continue;
+          }
+          break;
+        }catch(err){
+          lastFailure=err;
+          console.log("Gemini attempt failed:",modelUsed,String(err?.name||"Error"));
+          if(i<models.length-1&&(err?.name==="TimeoutError"||err?.name==="AbortError"))continue;
+          throw err;
+        }
       }
       if(!response.ok){
         const googleError=data?.error||{};
